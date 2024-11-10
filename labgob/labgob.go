@@ -24,21 +24,25 @@ var mu sync.Mutex
 var errorCount int // for TestCapital
 var checked map[reflect.Type]bool
 
+// LabEncoder是一个包装器，它在编码之前检查值是否符合要求。
 type LabEncoder struct {
 	gob *gob.Encoder
 }
 
+// NewEncoder创建一个新的LabEncoder。
 func NewEncoder(w io.Writer) *LabEncoder {
 	enc := &LabEncoder{}
 	enc.gob = gob.NewEncoder(w)
 	return enc
 }
 
+// Encode编码一个值。
 func (enc *LabEncoder) Encode(e interface{}) error {
 	checkValue(e)
 	return enc.gob.Encode(e)
 }
 
+// EncodeValue编码一个值。
 func (enc *LabEncoder) EncodeValue(value reflect.Value) error {
 	checkValue(value.Interface())
 	return enc.gob.EncodeValue(value)
@@ -54,12 +58,14 @@ func NewDecoder(r io.Reader) *LabDecoder {
 	return dec
 }
 
+// Decode解码一个值。
 func (dec *LabDecoder) Decode(e interface{}) error {
 	checkValue(e)
 	checkDefault(e)
 	return dec.gob.Decode(e)
 }
 
+// Register注册一个值。
 func Register(value interface{}) {
 	checkValue(value)
 	gob.Register(value)
@@ -67,6 +73,7 @@ func Register(value interface{}) {
 
 func RegisterName(name string, value interface{}) {
 	checkValue(value)
+	// RegisterName is like [Register] but uses the provided name rather than the type's default
 	gob.RegisterName(name, value)
 }
 
@@ -94,7 +101,7 @@ func checkType(t reflect.Type) {
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
 			rune, _ := utf8.DecodeRuneInString(f.Name)
-			if unicode.IsUpper(rune) == false {
+			if !unicode.IsUpper(rune) {
 				// ta da
 				fmt.Printf("labgob error: lower-case field %v of %v in RPC or persist/snapshot will break your Raft\n",
 					f.Name, t.Name())
@@ -159,7 +166,7 @@ func checkDefault1(value reflect.Value, depth int, name string) {
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Uintptr, reflect.Float32, reflect.Float64,
 		reflect.String:
-		if reflect.DeepEqual(reflect.Zero(t).Interface(), value.Interface()) == false {
+		if !reflect.DeepEqual(reflect.Zero(t).Interface(), value.Interface()) {
 			mu.Lock()
 			if errorCount < 1 {
 				what := name

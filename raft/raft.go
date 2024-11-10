@@ -22,7 +22,9 @@ package raft
 
 import (
 	//	"bytes"
+	"MyRaft/labgob"
 	"MyRaft/labrpc"
+	"bytes"
 	"sync"
 	"sync/atomic"
 )
@@ -45,10 +47,17 @@ type ApplyMsg struct {
 	CommandIndex int
 
 	// For 2D:
+	// 快照相关
 	SnapshotValid bool
 	Snapshot      []byte
 	SnapshotTerm  int
 	SnapshotIndex int
+}
+
+// 日志条目结构定义
+type LogEntry struct {
+	Term    int         // 该条目的任期号
+	Command interface{} // 该条目的指令
 }
 
 // A Go object implementing a single Raft peer.
@@ -62,51 +71,65 @@ type Raft struct {
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
+	// 根据图2的描述，Raft服务器必须维护什么状态
+	// 所有服务器上的持久性状态（在响应 RPC 之前更新稳定存储）
+	currentTerm int        // 服务器最后一次知道的任期号（初始化为 0，持续递增）
+	votedFor    int        // 在当前任期内获得投票的候选者的ID（如果没有则为 null）
+	log         []LogEntry // 日志条目集；每个条目包含状态机命令以及领导者收到条目时的任期（第一个索引为 1）
 
+	// 所有服务器上的易失性状态
+	commitIndex int // 已知已提交的最高日志条目的索引（初始化为 0，单调增加）
+	lastApplied int // 应用于状态机的最高日志条目的索引（初始化为 0，单调增加）
+
+	// 领导者服务器上的易失状态（选举后重新初始化）
+	nextIndex  []int // 对于每个服务器，发送到该服务器的下一个日志条目的索引（初始化为领导者最后一个日志索引 + 1）
+	matchIndex []int //	对于每个服务器，已知在服务器上复制的最高日志条目的索引（初始化为 0，单调增加）
 }
 
 // return currentTerm and whether this server
 // believes it is the leader.
+// 返回当前任期和该服务器是否认为自己是领导者
 func (rf *Raft) GetState() (int, bool) {
 
 	var term int
 	var isleader bool
 	// Your code here (2A).
+	term = rf.currentTerm
+	isleader = false
+
 	return term, isleader
 }
 
-// save Raft's persistent state to stable storage,
-// where it can later be retrieved after a crash and restart.
-// see paper's Figure 2 for a description of what should be persistent.
+// 将Raft的持久状态保存到稳定存储中，以便在崩溃和重新启动后可以检索。
+// 保存的状态包括当前任期号和已投票的候选者ID。
 func (rf *Raft) persist() {
-	// Your code here (2C).
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.log)
+
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
-// restore previously persisted state.
+// 从持久化存储中恢复之前的状态
 func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return
 	}
-	// Your code here (2C).
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var currentTerm int
+	var votedFor int
+	var log []LogEntry
+	if d.Decode(&currentTerm) != nil || d.Decode(&votedFor) != nil || d.Decode(&log) != nil {
+		// error handling
+	} else {
+		rf.currentTerm = currentTerm
+		rf.votedFor = votedFor
+		rf.log = log
+	}
 }
 
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
@@ -129,19 +152,48 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 
 // example RequestVote RPC arguments structure.
 // field names must start with capital letters!
+// RequestVote RPC 参数结构
+// 字段名必须以大写字母开头！
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
+	Term         int // 候选者的任期号
+	CandidateID  int // 请求选票的候选者的ID
+	LastLogIndex int // 候选者的最后日志条目的索引
+	LastLogTerm  int //	候选者最后一次日志条目的任期（§5.4）
 }
 
 // example RequestVote RPC reply structure.
 // field names must start with capital letters!
+// RequestVote RPC 回复结构
+// 字段名必须以大写字母开头！
 type RequestVoteReply struct {
 	// Your data here (2A).
+	Term        int  // currentTerm，供候选人自行更新
+	VoteGranted bool // true 表示候选人获得选票
 }
 
 // example RequestVote RPC handler.
+// RequestVote RPC 处理程序，响应候选人的请求
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	/*
+		如果 term < currentTerm 就返回 false
+		如果 votedFor 为空或为 candidateId，并且候选人的日志至少和接收者一样新，就投票给候选人（§5.2, §5.4）
+	*/
+	if args.Term < rf.currentTerm {
+		reply.VoteGranted = false
+		reply.Term = rf.currentTerm
+		return
+	}
+	if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
+		reply.VoteGranted = true
+		rf.votedFor = args.CandidateID
+		rf.currentTerm = args.Term
+		reply.Term = rf.currentTerm
+		rf.persist()
+		return
+	}
+
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -220,7 +272,7 @@ func (rf *Raft) killed() bool {
 // The ticker go routine starts a new election if this peer hasn't received
 // heartsbeats recently.
 func (rf *Raft) ticker() {
-	for rf.killed() == false {
+	for !rf.killed() {
 
 		// Your code here to check if a leader election should
 		// be started and to randomize sleeping time using
@@ -229,15 +281,13 @@ func (rf *Raft) ticker() {
 	}
 }
 
-// the service or tester wants to create a Raft server. the ports
-// of all the Raft servers (including this one) are in peers[]. this
-// server's port is peers[me]. all the servers' peers[] arrays
-// have the same order. persister is a place for this server to
-// save its persistent state, and also initially holds the most
-// recent saved state, if any. applyCh is a channel on which the
-// tester or service expects Raft to send ApplyMsg messages.
-// Make() must return quickly, so it should start goroutines
-// for any long-running work.
+// 服务或测试人员想要创建一个Raft服务器。所有Raft服务器（包括这个）的端口都在peers[]中。
+// 该服务器的端口是peers[me]。所有服务器的peers[]数组的顺序相同。
+// persister是这个服务器保存其持久状态的地方，如果有的话，它最初保存了最近保存的状态。
+//
+// applyCh是测试人员或服务期望Raft发送ApplyMsg消息的通道。
+//
+// Make()必须快速返回，因此它应该为任何长时间运行的工作启动goroutine。
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := &Raft{}
@@ -246,6 +296,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
+	rf.currentTerm = 0
+	rf.votedFor = -1             // 未投票
+	rf.log = make([]LogEntry, 1) // 索引从1开始
+	rf.log[0] = LogEntry{0, nil} // 第0个日志条目为空
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
