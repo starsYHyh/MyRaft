@@ -54,6 +54,12 @@ type LogEntry struct {
 	Command interface{} // 该条目的指令
 }
 
+const (
+	Follower  = iota // 跟随者
+	Candidate        // 候选者
+	Leader           // 领导者
+)
+
 // A Go object implementing a single Raft peer.
 type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
@@ -69,25 +75,21 @@ type Raft struct {
 	log         []LogEntry // 日志条目集；每个条目包含状态机命令以及领导者收到条目时的任期（第一个索引为 1）
 
 	// 所有服务器上的易失性状态
-
-	commitIndex int // 已知已提交的最高日志条目的索引（初始化为 0，单调增加）
-	lastApplied int // 应用于状态机的最高日志条目的索引（初始化为 0，单调增加）
+	state           int           // 服务器的状态（跟随者、候选人、领导者）
+	commitIndex     int           // 已知已提交的最高日志条目的索引（初始化为 0，单调增加）
+	lastApplied     int           // 应用于状态机的最高日志条目的索引（初始化为 0，单调增加）
+	updateTime      time.Time     // 距离上次收到心跳的时间，或开始选举的时间
+	electionTimeout time.Duration // 选举超时时间
 
 	// 领导者服务器上的易失状态（选举后重新初始化）
-	nextIndex  []int // 对于每个服务器，发送到该服务器的下一个日志条目的索引（初始化为领导者最后一个日志索引 + 1）
-	matchIndex []int //	对于每个服务器，已知在服务器上复制的最高日志条目的索引（初始化为 0，单调增加）
+	nextIndex     []int         // 对于每个服务器，发送到该服务器的下一个日志条目的索引（初始化为领导者最后一个日志索引 + 1）
+	matchIndex    []int         //	对于每个服务器，已知在服务器上复制的最高日志条目的索引（初始化为 0，单调增加）
+	heartBeatTime time.Duration // 心跳时间
 }
 
 // 返回当前任期和该服务器是否认为自己是领导者
 func (rf *Raft) GetState() (int, bool) {
-
-	var term int
-	var isleader bool
-	// Your code here (2A).
-	term = rf.currentTerm
-	isleader = false
-
-	return term, isleader
+	return rf.currentTerm, rf.state == Leader
 }
 
 // 将Raft的持久状态保存到稳定存储中，以便在崩溃和重新启动后可以检索。
@@ -150,14 +152,12 @@ type RequestVoteArgs struct {
 // RequestVote RPC 回复结构
 // 字段名必须以大写字母开头！
 type RequestVoteReply struct {
-	// Your data here (2A).
 	Term        int  // currentTerm，供候选人自行更新
 	VoteGranted bool // true 表示候选人获得选票
 }
 
 // RequestVote RPC 处理程序，响应候选人的请求
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	// Your code here (2A, 2B).
 	/*
 		如果 term < currentTerm 就返回 false
 		如果 votedFor 为空或为 candidateId，并且候选人的日志至少和接收者一样新，就投票给候选人（§5.2, §5.4）
@@ -172,8 +172,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.votedFor = args.CandidateID
 		rf.currentTerm = args.Term
 		reply.Term = rf.currentTerm
+		rf.updateTime = time.Now()
+		DPrintf("+++ Server %d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
-		return
+		// return
 	}
 }
 
@@ -189,6 +191,116 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	return ok
+}
+
+func (rf *Raft) leaderElection() {
+	rf.mu.Lock()
+
+	// 初始化参数
+	rf.currentTerm++
+	args := RequestVoteArgs{
+		Term:         rf.currentTerm,
+		CandidateID:  rf.me,
+		LastLogIndex: len(rf.log) - 1,
+		LastLogTerm:  rf.log[len(rf.log)-1].Term,
+	}
+
+	rf.votedFor = rf.me
+	rf.votedFor = rf.me
+	rf.state = Candidate
+
+	voteCount := 1 // 投给自己的票数
+	// 并行向其他服务器发送投票请求
+	var wg sync.WaitGroup
+
+	DPrintf(">>> Server %d start election, term is %d\n", rf.me, rf.currentTerm)
+
+	for i := range rf.peers {
+		if i != rf.me {
+			wg.Add(1)
+			go func(server int) {
+				defer wg.Done()
+				reply := RequestVoteReply{}
+
+				if rf.sendRequestVote(server, &args, &reply) {
+					if reply.Term > rf.currentTerm {
+						// 如果发现任期号更大，则更新自己的任期号
+						rf.currentTerm = reply.Term
+						rf.votedFor = -1
+						rf.persist()
+					}
+					if reply.VoteGranted {
+						// Handle vote granted
+						voteCount++
+					}
+				}
+			}(i)
+		}
+	}
+	wg.Wait()
+
+	// 如果获得的选票数大于等于半数，则成为领导者
+	if voteCount > len(rf.peers)/2 {
+		rf.state = Leader  // 成为领导者
+		rf.sendHeartbeat() // 立即发送心跳
+		DPrintf("<<< Server %d become leader\n", rf.me)
+	}
+
+	rf.mu.Unlock()
+}
+
+type AppendEntriesArgs struct {
+	Term         int        // 领导者的任期号
+	LeaderID     int        // 领导者的ID
+	PrevLogIndex int        // 新日志条目之前的索引
+	PrevLogTerm  int        // 新日志条目之前的任期
+	Entries      []LogEntry // 要附加的日志条目
+	LeaderCommit int        // 领导者的commitIndex
+}
+
+type AppendEntriesReply struct {
+	Term    int  // 	currentTerm，用于领导者自我更新
+	Success bool // 	如果跟随者包含与 prevLogIndex 和 prevLogTerm 匹配的条目，则为 true
+}
+
+// 处理附加日志条目的RPC请求
+func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	if args.Term < rf.currentTerm {
+		reply.Term = rf.currentTerm
+		reply.Success = false
+	}
+	if args.Entries == nil {
+		// 心跳
+		DPrintf("+++ Server %d receive heartbeat from leader %d\n", rf.me, args.LeaderID)
+		reply.Success = true
+		rf.updateTime = time.Now()
+	} else {
+		// 非心跳，正常的日志条目
+	}
+
+}
+
+// 向单个服务器发送附加日志条目
+func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	// Your code here (2A, 2B).
+	rf.peers[server].Call("Raft.AppendEntries", args, reply)
+}
+
+// 向所有服务器发送附加日志条目
+
+// 向所有服务器发送心跳
+func (rf *Raft) sendHeartbeat() {
+	args := AppendEntriesArgs{
+		Term:     rf.currentTerm,
+		LeaderID: rf.me,
+		Entries:  nil,
+	}
+	reply := AppendEntriesReply{}
+	for i := range rf.peers {
+		if i != rf.me {
+			go rf.sendAppendEntries(i, &args, &reply)
+		}
+	}
 }
 
 // 使用Raft的服务（例如k/v服务器）希望开始对要附加到Raft日志的下一个命令达成一致。
@@ -225,57 +337,23 @@ func (rf *Raft) killed() bool {
 }
 
 // ticker goroutine在此对等方最近没有收到心跳时启动新选举。
+// 在ticker中，需要处理两件事
+// 1. 如果最近选举超时时间内没有收到心跳，则启动新选举
+// 2. 如果是领导者，则发送心跳
 func (rf *Raft) ticker() {
 	for !rf.killed() {
-
-		// Your code here to check if a leader election should
-		// be started and to randomize sleeping time using
-		// time.Sleep().
-		// 检查是否应该启动领导者选举，并使用time.Sleep()随机化睡眠时间。
-		time.Sleep(time.Duration(150+rand.Intn(150)) * time.Millisecond)
-
-		// Check if a leader election should be started
-		rf.mu.Lock()
-		rf.currentTerm++
-		rf.votedFor = rf.me
-
-		args := RequestVoteArgs{
-			Term:         rf.currentTerm,
-			CandidateID:  rf.me,
-			LastLogIndex: len(rf.log) - 1,
-			LastLogTerm:  rf.log[len(rf.log)-1].Term,
+		// 无论是何种状态，都先休眠heartBeatTime时间
+		time.Sleep(rf.heartBeatTime)
+		// 如果是领导者，则每过一个heartbeat时间发送一次心跳
+		if rf.state == Leader {
+			rf.sendHeartbeat()
 		}
 
-		reply := RequestVoteReply{}
-		rf.votedFor = rf.me
-
-		var wg sync.WaitGroup
-		for i := range rf.peers {
-			if i != rf.me {
-				wg.Add(1)
-				go func(server int) {
-					defer wg.Done()
-					var reply RequestVoteReply
-					if rf.sendRequestVote(server, &args, &reply) {
-						rf.mu.Lock()
-						defer rf.mu.Unlock()
-						if reply.Term > rf.currentTerm {
-							rf.currentTerm = reply.Term
-							rf.votedFor = -1
-							rf.persist()
-						}
-						if reply.VoteGranted {
-							// Handle vote granted
-						}
-					}
-				}(i)
-			}
+		// 如果是跟随者，则检测距离上次收到心跳的时间是否超过了选举超时时间
+		// 如果超过了，则启动新选举
+		if (rf.state == Follower || rf.state == Candidate) && time.Since(rf.updateTime) > rf.electionTimeout {
+			rf.leaderElection()
 		}
-		wg.Wait()
-
-		rf.sendRequestVote(1, &args, &reply)
-
-		rf.mu.Unlock()
 	}
 }
 
@@ -294,7 +372,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
-	rf.currentTerm = 0
+	rf.state = Follower
+	rf.heartBeatTime = 120 * time.Millisecond                                 // 心跳时间，因测试要求每秒不多于10次/秒
+	rf.electionTimeout = time.Duration(500+rand.Intn(240)) * time.Millisecond // 选举超时时间，大于论文中的300ms
+	rf.updateTime = time.Now()
+	rf.currentTerm = 0           // 任期号
 	rf.votedFor = -1             // 未投票
 	rf.log = make([]LogEntry, 1) // 索引从1开始
 	rf.log[0] = LogEntry{0, nil} // 第0个日志条目为空
