@@ -173,7 +173,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.currentTerm = args.Term
 		reply.Term = rf.currentTerm
 		rf.updateTime = time.Now()
-		DPrintf("+++ Server %d vote for %d\n", rf.me, args.CandidateID)
+		DPrintf(dVote, "S%d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
 		// return
 	}
@@ -208,12 +208,13 @@ func (rf *Raft) leaderElection() {
 	rf.votedFor = rf.me
 	rf.votedFor = rf.me
 	rf.state = Candidate
+	rf.electionTimeout = time.Duration(500+rand.Intn(240)) * time.Millisecond
 
 	voteCount := 1 // 投给自己的票数
 	// 并行向其他服务器发送投票请求
 	var wg sync.WaitGroup
 
-	DPrintf(">>> Server %d start election, term is %d\n", rf.me, rf.currentTerm)
+	DPrintf(dVote, "S%d start election, term is %d", rf.me, rf.currentTerm)
 
 	for i := range rf.peers {
 		if i != rf.me {
@@ -243,7 +244,7 @@ func (rf *Raft) leaderElection() {
 	if voteCount > len(rf.peers)/2 {
 		rf.state = Leader  // 成为领导者
 		rf.sendHeartbeat() // 立即发送心跳
-		DPrintf("<<< Server %d become leader\n", rf.me)
+		DPrintf(dLeader, "S%d become leader\n", rf.me)
 	}
 
 	rf.mu.Unlock()
@@ -271,7 +272,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 	if args.Entries == nil {
 		// 心跳
-		DPrintf("+++ Server %d receive heartbeat from leader %d\n", rf.me, args.LeaderID)
+		DPrintf(dInfo, "S%d receive heartbeat from leader %d\n", rf.me, args.LeaderID)
 		reply.Success = true
 		rf.updateTime = time.Now()
 	} else {

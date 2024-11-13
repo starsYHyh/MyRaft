@@ -1,0 +1,59 @@
+Test (2A): initial election ...
+006304 VOTE Server 0 start election, term is 1
++++ Server 2 vote for 0
++++ Server 1 vote for 0
+006334 LEAD Server 0 become leader
+006343 INFO Server 2 receive heartbeat from leader 0
+006346 INFO Server 1 receive heartbeat from leader 0
+007554 INFO Server 2 receive heartbeat from leader 0
+007560 INFO Server 1 receive heartbeat from leader 0
+labgob warning: Decoding into a non-default variable/field Success may not work
+008758 INFO Server 2 receive heartbeat from leader 0
+008761 INFO Server 1 receive heartbeat from leader 0
+009961 INFO Server 2 receive heartbeat from leader 0
+009965 INFO Server 1 receive heartbeat from leader 0
+011167 INFO Server 2 receive heartbeat from leader 0
+011167 INFO Server 1 receive heartbeat from leader 0
+012381 INFO Server 2 receive heartbeat from leader 0
+012385 INFO Server 1 receive heartbeat from leader 0
+013589 INFO Server 2 receive heartbeat from leader 0
+013590 INFO Server 1 receive heartbeat from leader 0
+014795 INFO Server 2 receive heartbeat from leader 0
+014796 INFO Server 1 receive heartbeat from leader 0
+016000 INFO Server 2 receive heartbeat from leader 0
+016001 INFO Server 1 receive heartbeat from leader 0
+017208 INFO Server 2 receive heartbeat from leader 0
+017209 INFO Server 1 receive heartbeat from leader 0
+018424 INFO Server 2 receive heartbeat from leader 0
+018425 INFO Server 1 receive heartbeat from leader 0
+019632 INFO Server 2 receive heartbeat from leader 0
+019635 INFO Server 1 receive heartbeat from leader 0
+020845 INFO Server 1 receive heartbeat from leader 0
+020845 INFO Server 2 receive heartbeat from leader 0
+022059 INFO Server 2 receive heartbeat from leader 0
+022062 INFO Server 1 receive heartbeat from leader 0
+023279 INFO Server 2 receive heartbeat from leader 0
+023280 INFO Server 1 receive heartbeat from leader 0
+024505 INFO Server 2 receive heartbeat from leader 0
+024506 INFO Server 1 receive heartbeat from leader 0
+025715 INFO Server 2 receive heartbeat from leader 0
+025718 INFO Server 1 receive heartbeat from leader 0
+026926 INFO Server 2 receive heartbeat from leader 0
+026928 INFO Server 1 receive heartbeat from leader 0
+028137 INFO Server 2 receive heartbeat from leader 0
+028141 INFO Server 1 receive heartbeat from leader 0
+029349 INFO Server 2 receive heartbeat from leader 0
+029350 INFO Server 1 receive heartbeat from leader 0
+030560 INFO Server 1 receive heartbeat from leader 0
+030561 INFO Server 2 receive heartbeat from leader 0
+031774 INFO Server 1 receive heartbeat from leader 0
+031777 INFO Server 2 receive heartbeat from leader 0
+032985 INFO Server 2 receive heartbeat from leader 0
+032986 INFO Server 1 receive heartbeat from leader 0
+034200 INFO Server 2 receive heartbeat from leader 0
+034202 INFO Server 1 receive heartbeat from leader 0
+035415 INFO Server 2 receive heartbeat from leader 0
+035418 INFO Server 1 receive heartbeat from leader 0
+  ... Passed --   3.6  3   52   12364    0
+PASS
+ok  	MyRaft/raft	3.572s
