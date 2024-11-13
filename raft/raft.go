@@ -167,6 +167,15 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.Term = rf.currentTerm
 		return
 	}
+
+	// 如果发现任期号更大，则更新自己的任期号，转换为跟随者，将投票状态清空
+	if args.Term > rf.currentTerm {
+		rf.currentTerm = args.Term
+		rf.votedFor = -1
+		rf.state = Follower
+		rf.persist()
+	}
+
 	if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
@@ -175,7 +184,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.updateTime = time.Now()
 		DPrintf(dVote, "S%d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
-		// return
 	}
 }
 
@@ -208,7 +216,7 @@ func (rf *Raft) leaderElection() {
 	rf.votedFor = rf.me
 	rf.votedFor = rf.me
 	rf.state = Candidate
-	rf.electionTimeout = time.Duration(500+rand.Intn(240)) * time.Millisecond
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
 
 	voteCount := 1 // 投给自己的票数
 	// 并行向其他服务器发送投票请求
@@ -245,7 +253,15 @@ func (rf *Raft) leaderElection() {
 		rf.state = Leader  // 成为领导者
 		rf.sendHeartbeat() // 立即发送心跳
 		DPrintf(dLeader, "S%d become leader\n", rf.me)
+	} else {
+		DPrintf(dVote, "S%d election failed\n", rf.me)
 	}
+
+	// else if rf.state == Follower {
+	// 	// 如果在选举过程中变成了跟随者，则重置选举时间
+	// 	rf.updateTime = time.Now()
+	// 	DPrintf(dVote, "S%d become follower and election failed\n", rf.me)
+	// }
 
 	rf.mu.Unlock()
 }
@@ -269,12 +285,14 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		reply.Success = false
+		return
 	}
 	if args.Entries == nil {
 		// 心跳
 		DPrintf(dInfo, "S%d receive heartbeat from leader %d\n", rf.me, args.LeaderID)
 		reply.Success = true
 		rf.updateTime = time.Now()
+		rf.state = Follower
 	} else {
 		// 非心跳，正常的日志条目
 	}
@@ -375,7 +393,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// Your initialization code here (2A, 2B, 2C).
 	rf.state = Follower
 	rf.heartBeatTime = 120 * time.Millisecond                                 // 心跳时间，因测试要求每秒不多于10次/秒
-	rf.electionTimeout = time.Duration(500+rand.Intn(240)) * time.Millisecond // 选举超时时间，大于论文中的300ms
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond // 选举超时时间，大于论文中的300ms
 	rf.updateTime = time.Now()
 	rf.currentTerm = 0           // 任期号
 	rf.votedFor = -1             // 未投票
