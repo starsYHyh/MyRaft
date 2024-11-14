@@ -216,7 +216,7 @@ func (rf *Raft) leaderElection() {
 	rf.votedFor = rf.me
 	rf.votedFor = rf.me
 	rf.state = Candidate
-	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
+	rf.electionTimeout = time.Duration(150+rand.Intn(150)) * time.Millisecond
 
 	voteCount := 1 // 投给自己的票数
 	// 并行向其他服务器发送投票请求

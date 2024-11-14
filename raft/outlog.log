@@ -1,59 +1,44 @@
-Test (2A): initial election ...
-006304 VOTE Server 0 start election, term is 1
-+++ Server 2 vote for 0
-+++ Server 1 vote for 0
-006334 LEAD Server 0 become leader
-006343 INFO Server 2 receive heartbeat from leader 0
-006346 INFO Server 1 receive heartbeat from leader 0
-007554 INFO Server 2 receive heartbeat from leader 0
-007560 INFO Server 1 receive heartbeat from leader 0
+Test (2A): election after network failure ...
+000378 VOTE S1 start election, term is 1
+000380 VOTE S0 vote for 1
+000381 VOTE S2 vote for 1
+000381 LEAD S1 become leader
+000382 INFO S0 receive heartbeat from leader 1
+000384 INFO S2 receive heartbeat from leader 1
 labgob warning: Decoding into a non-default variable/field Success may not work
-008758 INFO Server 2 receive heartbeat from leader 0
-008761 INFO Server 1 receive heartbeat from leader 0
-009961 INFO Server 2 receive heartbeat from leader 0
-009965 INFO Server 1 receive heartbeat from leader 0
-011167 INFO Server 2 receive heartbeat from leader 0
-011167 INFO Server 1 receive heartbeat from leader 0
-012381 INFO Server 2 receive heartbeat from leader 0
-012385 INFO Server 1 receive heartbeat from leader 0
-013589 INFO Server 2 receive heartbeat from leader 0
-013590 INFO Server 1 receive heartbeat from leader 0
-014795 INFO Server 2 receive heartbeat from leader 0
-014796 INFO Server 1 receive heartbeat from leader 0
-016000 INFO Server 2 receive heartbeat from leader 0
-016001 INFO Server 1 receive heartbeat from leader 0
-017208 INFO Server 2 receive heartbeat from leader 0
-017209 INFO Server 1 receive heartbeat from leader 0
-018424 INFO Server 2 receive heartbeat from leader 0
-018425 INFO Server 1 receive heartbeat from leader 0
-019632 INFO Server 2 receive heartbeat from leader 0
-019635 INFO Server 1 receive heartbeat from leader 0
-020845 INFO Server 1 receive heartbeat from leader 0
-020845 INFO Server 2 receive heartbeat from leader 0
-022059 INFO Server 2 receive heartbeat from leader 0
-022062 INFO Server 1 receive heartbeat from leader 0
-023279 INFO Server 2 receive heartbeat from leader 0
-023280 INFO Server 1 receive heartbeat from leader 0
-024505 INFO Server 2 receive heartbeat from leader 0
-024506 INFO Server 1 receive heartbeat from leader 0
-025715 INFO Server 2 receive heartbeat from leader 0
-025718 INFO Server 1 receive heartbeat from leader 0
-026926 INFO Server 2 receive heartbeat from leader 0
-026928 INFO Server 1 receive heartbeat from leader 0
-028137 INFO Server 2 receive heartbeat from leader 0
-028141 INFO Server 1 receive heartbeat from leader 0
-029349 INFO Server 2 receive heartbeat from leader 0
-029350 INFO Server 1 receive heartbeat from leader 0
-030560 INFO Server 1 receive heartbeat from leader 0
-030561 INFO Server 2 receive heartbeat from leader 0
-031774 INFO Server 1 receive heartbeat from leader 0
-031777 INFO Server 2 receive heartbeat from leader 0
-032985 INFO Server 2 receive heartbeat from leader 0
-032986 INFO Server 1 receive heartbeat from leader 0
-034200 INFO Server 2 receive heartbeat from leader 0
-034202 INFO Server 1 receive heartbeat from leader 0
-035415 INFO Server 2 receive heartbeat from leader 0
-035418 INFO Server 1 receive heartbeat from leader 0
-  ... Passed --   3.6  3   52   12364    0
-PASS
-ok  	MyRaft/raft	3.572s
+000489 LOG1 L1 disconnected
+000987 VOTE S2 start election, term is 2
+000987 VOTE S0 vote for 2
+001728 VOTE S0 start election, term is 3
+001729 VOTE S2 vote for 0
+004045 LEAD S2 become leader
+004045 INFO S0 receive heartbeat from leader 2
+004166 INFO S0 receive heartbeat from leader 2
+004287 INFO S0 receive heartbeat from leader 2
+004407 INFO S0 receive heartbeat from leader 2
+004501 LOG2 L1 reconnected
+004530 INFO S1 receive heartbeat from leader 2
+004530 INFO S0 receive heartbeat from leader 2
+004651 INFO S1 receive heartbeat from leader 2
+004651 INFO S0 receive heartbeat from leader 2
+004672 LEAD S0 become leader
+004672 INFO S1 receive heartbeat from leader 0
+004672 INFO S2 receive heartbeat from leader 0
+004793 INFO S2 receive heartbeat from leader 0
+004793 INFO S1 receive heartbeat from leader 0
+004914 INFO S2 receive heartbeat from leader 0
+004914 INFO S1 receive heartbeat from leader 0
+004984 LOG1 L0 and L1 disconnected
+005521 VOTE S2 start election, term is 4
+005643 VOTE S1 start election, term is 2
+006994 LOG2 L1 reconnected
+010192 VOTE S1 election failed
+010313 VOTE S1 start election, term is 3
+010826 VOTE S1 election failed
+010948 VOTE S1 start election, term is 5
+010949 VOTE S2 vote for 1
+--- FAIL: TestReElection2A (12.08s)
+    config.go:459: expected one leader, got none
+FAIL
+exit status 1
+FAIL	MyRaft/raft	12.086s

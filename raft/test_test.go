@@ -22,7 +22,7 @@ import (
 const RaftElectionTimeout = 1000 * time.Millisecond
 
 func TestInitialElection2A(t *testing.T) {
-	servers := 3
+	servers := 5
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
@@ -33,6 +33,7 @@ func TestInitialElection2A(t *testing.T) {
 
 	// sleep a bit to avoid racing with followers learning of the
 	// election, then check that all peers agree on the term.
+	// 睡眠一段时间，避免与跟随者学习选举竞争，然后检查所有对等方是否同意任期。
 	time.Sleep(50 * time.Millisecond)
 	term1 := cfg.checkTerms()
 	if term1 < 1 {
@@ -47,6 +48,11 @@ func TestInitialElection2A(t *testing.T) {
 	}
 
 	// there should still be a leader.
+	leader1 := cfg.checkOneLeader()
+
+	// 以下部分为自定义测试
+	cfg.disconnect(leader1)
+	DPrintf(dLog, "L%d disconnected", leader1)
 	cfg.checkOneLeader()
 
 	cfg.end()
@@ -62,22 +68,22 @@ func TestReElection2A(t *testing.T) {
 	leader1 := cfg.checkOneLeader()
 
 	// if the leader disconnects, a new one should be elected.
-	cfg.disconnect(leader1)
 	DPrintf(dLog, "L%d disconnected", leader1)
+	cfg.disconnect(leader1)
 	cfg.checkOneLeader()
 
 	// if the old leader rejoins, that shouldn't
 	// disturb the new leader. and the old leader
 	// should switch to follower.
+	DPrintf(dLog2, "L%d reconnected", leader1)
 	cfg.connect(leader1)
-	DPrintf(dLog, "L%d reconnected", leader1)
 	leader2 := cfg.checkOneLeader()
 
 	// if there's no quorum, no new leader should
 	// be elected.
+	DPrintf(dLog, "L%d and L%d disconnected", leader2, (leader2+1)%servers)
 	cfg.disconnect(leader2)
 	cfg.disconnect((leader2 + 1) % servers)
-	DPrintf(dLog, "L%d and L%d disconnected", leader2, (leader2+1)%servers)
 	time.Sleep(2 * RaftElectionTimeout)
 
 	// check that the one connected server
@@ -85,10 +91,12 @@ func TestReElection2A(t *testing.T) {
 	cfg.checkNoLeader()
 
 	// if a quorum arises, it should elect a leader.
+	DPrintf(dLog2, "L%d reconnected", (leader2+1)%servers)
 	cfg.connect((leader2 + 1) % servers)
 	cfg.checkOneLeader()
 
 	// re-join of last node shouldn't prevent leader from existing.
+	DPrintf(dLog2, "L%d reconnected", leader2)
 	cfg.connect(leader2)
 	cfg.checkOneLeader()
 
