@@ -207,23 +207,21 @@ func (rf *Raft) leaderElection() {
 
 	// 初始化参数
 	rf.currentTerm++
+	rf.votedFor = rf.me                                                       // 为自己投票
+	rf.state = Candidate                                                      // 转换为候选者
+	rf.updateTime = time.Now()                                                // 更新选举时间
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond // 重新随机化选举超时时间
 	args := RequestVoteArgs{
-		Term:         rf.currentTerm,
+		Term:         rf.currentTerm, // 当前任期
 		CandidateID:  rf.me,
 		LastLogIndex: len(rf.log) - 1,
 		LastLogTerm:  rf.log[len(rf.log)-1].Term,
 	}
 
-	rf.votedFor = rf.me
-	rf.state = Candidate
-	rf.updateTime = time.Now()
-	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
-
-	voteCount := 1 // 投给自己的票数
-	// 并行向其他服务器发送投票请求
-
-	// 需要保证在收到半数以上的选票或者选举超时后立即退出
+	// 需并行向其他服务器发送投票请求，要保证在收到半数以上的选票或者选举超时后立即退出
 	var wg sync.WaitGroup
+	voteCount := 1 // 投给自己的票数
+	// 创建一个channel，用于接收其他服务器的投票结果，长度为peers-1
 	voteCh := make(chan bool, len(rf.peers)-1)
 	DPrintf(dVote, "S%d start election, term is %d", rf.me, rf.currentTerm)
 	for i := range rf.peers {
@@ -244,8 +242,10 @@ func (rf *Raft) leaderElection() {
 						rf.persist()
 						// rf.mu.Unlock()
 					}
+					// 如果收到投票结果，则将结果发送到voteCh中
 					voteCh <- reply.VoteGranted
 				} else {
+					// 如果没有收到，则发送false到voteCh中
 					voteCh <- false
 				}
 			}(i)
@@ -254,25 +254,28 @@ func (rf *Raft) leaderElection() {
 
 	go func() {
 		wg.Wait()
-		close(voteCh)
+		close(voteCh) // 关闭voteCh的写入端
 	}()
 
+	// 创建一个定时器，用于选举超时
 	timeout := time.After(rf.electionTimeout)
 	for {
 		select {
 		case voteGranted, ok := <-voteCh:
-			if !ok {
+			if !ok { // 如果voteCh中已经没有了数据
 				voteCh = nil
-			} else if voteGranted {
+			} else if voteGranted { // 否则，如果收到了投票
 				voteCount++
 			}
 			if voteCount > len(rf.peers)/2 {
 				rf.state = Leader
 				rf.sendHeartbeat()
 				DPrintf(dLeader, "S%d become leader\n", rf.me)
+				// 如果检测到自己成为了领导者，则立即退出选举
 				return
 			}
 		case <-timeout:
+			// 如果定时器超时，则选举失败
 			DPrintf(dVote, "S%d election timeout\n", rf.me)
 			return
 		}

@@ -1,44 +1,99 @@
-Test (2A): election after network failure ...
-000378 VOTE S1 start election, term is 1
-000380 VOTE S0 vote for 1
-000381 VOTE S2 vote for 1
-000381 LEAD S1 become leader
-000382 INFO S0 receive heartbeat from leader 1
-000384 INFO S2 receive heartbeat from leader 1
+Test (2A): initial election ...
+000000 TEST Test InitialElection: initial election
+000482 VOTE S1 start election, term is 1
+000483 VOTE S4 start election, term is 1
+000484 VOTE S0 vote for 1
+000484 VOTE S3 vote for 1
+000484 VOTE S2 vote for 4
+000485 LEAD S1 become leader
 labgob warning: Decoding into a non-default variable/field Success may not work
-000489 LOG1 L1 disconnected
-000987 VOTE S2 start election, term is 2
-000987 VOTE S0 vote for 2
-001728 VOTE S0 start election, term is 3
-001729 VOTE S2 vote for 0
-004045 LEAD S2 become leader
-004045 INFO S0 receive heartbeat from leader 2
-004166 INFO S0 receive heartbeat from leader 2
-004287 INFO S0 receive heartbeat from leader 2
-004407 INFO S0 receive heartbeat from leader 2
-004501 LOG2 L1 reconnected
-004530 INFO S1 receive heartbeat from leader 2
-004530 INFO S0 receive heartbeat from leader 2
-004651 INFO S1 receive heartbeat from leader 2
-004651 INFO S0 receive heartbeat from leader 2
-004672 LEAD S0 become leader
-004672 INFO S1 receive heartbeat from leader 0
-004672 INFO S2 receive heartbeat from leader 0
-004793 INFO S2 receive heartbeat from leader 0
-004793 INFO S1 receive heartbeat from leader 0
-004914 INFO S2 receive heartbeat from leader 0
-004914 INFO S1 receive heartbeat from leader 0
-004984 LOG1 L0 and L1 disconnected
-005521 VOTE S2 start election, term is 4
-005643 VOTE S1 start election, term is 2
-006994 LOG2 L1 reconnected
-010192 VOTE S1 election failed
-010313 VOTE S1 start election, term is 3
-010826 VOTE S1 election failed
-010948 VOTE S1 start election, term is 5
-010949 VOTE S2 vote for 1
---- FAIL: TestReElection2A (12.08s)
-    config.go:459: expected one leader, got none
-FAIL
-exit status 1
-FAIL	MyRaft/raft	12.086s
+000997 VOTE S4 election timeout
+  ... Passed --   3.5  5  108   25552    0
+Test (2A): election after network failure ...
+003474 TEST Test ReElection: election after network failure
+003957 VOTE S2 start election, term is 1
+003958 VOTE S0 vote for 2
+003958 VOTE S1 vote for 2
+003959 LEAD S2 become leader
+004456 LOG1 L2 disconnected
+005045 VOTE S0 start election, term is 2
+005047 VOTE S1 vote for 0
+005047 LEAD S0 become leader
+005458 LOG2 L2 reconnected
+005937 LOG1 L0 and L1 disconnected
+006494 VOTE S2 start election, term is 2
+006615 VOTE S1 start election, term is 3
+006947 VOTE S2 election timeout
+007068 VOTE S2 start election, term is 3
+007227 VOTE S1 election timeout
+007348 VOTE S1 start election, term is 4
+007629 VOTE S2 election timeout
+007750 VOTE S2 start election, term is 4
+007839 VOTE S1 election timeout
+007938 LOG2 L1 reconnected
+007960 VOTE S1 start election, term is 5
+007961 VOTE S2 vote for 1
+007961 LEAD S1 become leader
+008420 LOG2 L0 reconnected
+008466 VOTE S2 election timeout
+  ... Passed --   5.4  3  118   22602    0
+Test (2A): multiple elections ...
+008918 TEST Test ManyElections: multiple elections
+009400 VOTE S5 start election, term is 1
+009400 VOTE S6 start election, term is 1
+009400 VOTE S0 start election, term is 1
+009401 VOTE S1 vote for 5
+009401 VOTE S4 vote for 0
+009401 VOTE S2 vote for 5
+009401 VOTE S3 vote for 5
+009401 LEAD S5 become leader
+009871 VOTE S0 election timeout
+010005 VOTE S2 start election, term is 2
+010006 VOTE S0 vote for 2
+010007 VOTE S3 vote for 2
+010007 VOTE S1 vote for 2
+010007 VOTE S6 vote for 2
+010008 LEAD S2 become leader
+010023 VOTE S6 election timeout
+010366 VOTE S4 start election, term is 2
+010959 VOTE S0 start election, term is 3
+010959 VOTE S1 vote for 0
+010960 VOTE S2 vote for 0
+010960 VOTE S3 vote for 0
+010960 VOTE S6 vote for 0
+010960 LEAD S0 become leader
+011055 VOTE S4 election timeout
+011175 VOTE S4 start election, term is 3
+011759 VOTE S4 election timeout
+011880 VOTE S4 start election, term is 4
+012059 VOTE S1 start election, term is 4
+012442 VOTE S4 election timeout
+012557 VOTE S6 start election, term is 4
+012559 VOTE S3 vote for 6
+012559 VOTE S2 vote for 6
+012564 VOTE S4 start election, term is 5
+012565 VOTE S3 vote for 4
+012565 VOTE S2 vote for 4
+012565 VOTE S6 vote for 4
+012567 LEAD S4 become leader
+012601 VOTE S1 election timeout
+012722 VOTE S1 start election, term is 5
+013005 VOTE S6 election timeout
+013432 VOTE S1 election timeout
+013487 VOTE S6 start election, term is 6
+013489 VOTE S5 vote for 6
+013489 VOTE S2 vote for 6
+013489 VOTE S3 vote for 6
+013490 LEAD S6 become leader
+013553 VOTE S1 start election, term is 6
+013952 VOTE S1 election timeout
+014072 VOTE S1 start election, term is 7
+014474 VOTE S5 start election, term is 7
+014474 VOTE S0 vote for 5
+014474 VOTE S2 vote for 5
+014474 VOTE S3 vote for 5
+014475 LEAD S5 become leader
+014532 VOTE S1 election timeout
+  ... Passed --   6.1  7  720  134780    0
+PASS
+ok  	MyRaft/raft	15.052s
