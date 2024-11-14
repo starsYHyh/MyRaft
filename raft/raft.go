@@ -210,9 +210,6 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 }
 
 func (rf *Raft) leaderElection() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-
 	// 初始化参数
 	rf.currentTerm++
 	rf.votedFor = rf.me  // 为自己投票
@@ -243,12 +240,14 @@ func (rf *Raft) leaderElection() {
 				if rf.sendRequestVote(server, &args, &reply) {
 					// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
 					// 对应着论文中图二的rules for all servers
+					rf.mu.Lock()
 					if reply.Term > rf.currentTerm {
 						rf.currentTerm = reply.Term
 						rf.votedFor = -1
 						rf.state = Follower
 						rf.persist()
 					}
+					rf.mu.Unlock()
 					// 如果收到投票结果，则将结果发送到voteCh中
 					voteCh <- reply.VoteGranted
 				} else {
@@ -265,23 +264,29 @@ func (rf *Raft) leaderElection() {
 	}()
 
 	for {
-		select {
-		case voteGranted, ok := <-voteCh:
-			if !ok { // 如果voteCh中已经没有了数据
-				voteCh = nil
-			} else if voteGranted { // 否则，如果收到了投票
-				voteCount++
-			}
-			if voteCount > len(rf.peers)/2 {
-				rf.state = Leader
-				rf.sendHeartbeat()
-				DPrintf(dLeader, "C%d become leader\n", rf.me)
-				// 如果检测到自己成为了领导者，则立即退出选举
+		if rf.state == Candidate {
+			select {
+			case voteGranted, ok := <-voteCh:
+				if !ok { // 如果voteCh中已经没有了数据
+					voteCh = nil
+				} else if voteGranted { // 否则，如果收到了投票
+					voteCount++
+				}
+				if voteCount > len(rf.peers)/2 {
+					rf.state = Leader
+					rf.sendHeartbeat()
+					DPrintf(dLeader, "C%d become leader\n", rf.me)
+					// 如果检测到自己成为了领导者，则立即退出选举
+					return
+				}
+			case <-timeout:
+				// 如果定时器超时，则选举失败
+				DPrintf(dVote, "C%d election timeout\n", rf.me)
 				return
 			}
-		case <-timeout:
-			// 如果定时器超时，则选举失败
-			DPrintf(dVote, "C%d election timeout\n", rf.me)
+		} else {
+			// 如果检测到在选举过程中由候选者变成了跟随者，例如任期原因，则立即退出选举
+			DPrintf(dVote, "C%d become follower\n", rf.me)
 			return
 		}
 	}

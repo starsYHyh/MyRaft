@@ -43,10 +43,53 @@ def list_topics(value: Optional[str]):
             raise typer.BadParameter(f"topic {topic} not recognized")
     return topics
 
-def print_error_message(line: str, console: Console):
-    """Print formatted error messages."""
-    if line.startswith('FAIL'):
+def print_test_message(line: str, console: Console):
+    """Print formatted test messages (both success and failure)."""
+    # 匹配成功的测试结果
+    passed_match = re.match(r'(.*Passed.*?)(\d+\.\d+)(.*?)(\d+)(\s+)(\d+)(\s+)(\d+)(\s+)(\d+)\s*$', line)
+    if passed_match:
+        # 分解匹配的各个部分并添加颜色
+        parts = list(passed_match.groups())
+        formatted_text = Text.assemble(
+            (parts[0], "green"), # "... Passed" 部分
+            (parts[1], "bright_green"), # 时间
+            (parts[2], "green"), # 空格等其他字符
+            (parts[3], "bright_green"), # 第一个数字
+            (parts[4], "green"), # 空格
+            (parts[5], "bright_green"), # 第二个数字
+            (parts[6], "green"), # 空格
+            (parts[7], "bright_green"), # 第三个数字
+            (parts[8], "green"), # 空格
+            (parts[9], "bright_green"), # 第四个数字
+        )
+        console.print(formatted_text)
+        return True
+
+    # 匹配 PASS 行
+    elif line.strip() == "PASS":
+        console.print(line, style="bold green")
+        return True
+    
+    # 匹配测试成功的总结行
+    elif line.startswith("ok"):
+        parts = line.split()
+        if len(parts) >= 4:  # 确保有足够的部分可以格式化
+            module_path = parts[1]
+            time_str = parts[2]
+            console.print(Text.assemble(
+                ("ok      ", "green"),
+                (module_path, "bright_green"),
+                ("    ", "green"),
+                (time_str, "bright_green")
+            ))
+        else:
+            console.print(line, style="green")
+        return True
+
+    # 处理失败的测试信息
+    elif line.startswith('FAIL'):
         console.print(line, style="bold red")
+        return True
     elif '--- FAIL:' in line:
         match = re.match(r'--- FAIL: (\w+) \(([\d.]+)s\)', line)
         if match:
@@ -56,10 +99,12 @@ def print_error_message(line: str, console: Console):
                 (test_name, "bold red underline"),
                 (f" ({duration}s)", "red")
             ))
+            return True
     elif 'go' in line:
         console.print(line, style="yellow")
-    else:
-        console.print(line)
+        return True
+    
+    return False
 
 def main(
     file: typer.FileText = typer.Argument(None, help="File to read, stdin otherwise"),
@@ -83,13 +128,16 @@ def main(
     width = console.size.width
 
     panic = False
-    error_buffer = []
     
     for line in input_:
         try:
-            # Try to parse as normal log entry
+            # 首先尝试作为测试消息处理
+            if print_test_message(line.strip(), console):
+                continue
+
+            # 尝试解析为普通日志条目
             parts = line.strip().split(" ")
-            if len(parts) >= 3 and not any(x in line for x in ['FAIL:', 'FAIL\t', 'config.go']):
+            if len(parts) >= 3:
                 time, topic, *msg = parts
                 # To ignore some topics
                 if topic not in topics:
@@ -103,7 +151,7 @@ def main(
                     try:
                         i = int(msg[1])
                     except (IndexError, ValueError):
-                        print_error_message(line.strip(), console)
+                        print(line.strip())
                         continue
 
                 # Colorize output by using rich syntax when needed
@@ -123,20 +171,17 @@ def main(
                     cols = Columns(cols, width=col_width - 1, equal=True, expand=True)
                     print(cols)
             else:
-                # Handle error messages and test output
+                # Handle remaining special messages
                 if line.startswith('panic'):
                     panic = True
                     console.print(Panel(line.strip(), style="bold red", title="PANIC"))
-                elif any(x in line for x in ['FAIL:', 'FAIL\t', 'config.go']):
-                    # 直接打印错误信息，不再缓存
-                    print_error_message(line.strip(), console)
+                elif not panic and line.strip():
+                    print("#" * console.width)
                 else:
-                    if not panic and line.strip():
-                        print("#" * console.width)
                     print(line, end="")
         except Exception as e:
             # If parsing fails, print directly
-            print_error_message(line.strip(), console)
+            print(line.strip())
 
 if __name__ == "__main__":
     typer.run(main)
