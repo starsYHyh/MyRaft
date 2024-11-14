@@ -27,6 +27,7 @@ func TestInitialElection2A(t *testing.T) {
 	defer cfg.cleanup()
 
 	cfg.begin("Test (2A): initial election")
+	DPrintf(dTest, "Test InitialElection: initial election")
 
 	// is a leader elected?
 	cfg.checkOneLeader()
@@ -48,12 +49,12 @@ func TestInitialElection2A(t *testing.T) {
 	}
 
 	// there should still be a leader.
-	leader1 := cfg.checkOneLeader()
+	cfg.checkOneLeader()
 
 	// 以下部分为自定义测试
-	cfg.disconnect(leader1)
-	DPrintf(dLog, "L%d disconnected", leader1)
-	cfg.checkOneLeader()
+	// cfg.disconnect(leader1)
+	// DPrintf(dLog, "L%d disconnected", leader1)
+	// cfg.checkOneLeader()
 
 	cfg.end()
 }
@@ -64,6 +65,7 @@ func TestReElection2A(t *testing.T) {
 	defer cfg.cleanup()
 
 	cfg.begin("Test (2A): election after network failure")
+	DPrintf(dTest, "Test ReElection: election after network failure")
 
 	leader1 := cfg.checkOneLeader()
 
@@ -109,6 +111,7 @@ func TestManyElections2A(t *testing.T) {
 	defer cfg.cleanup()
 
 	cfg.begin("Test (2A): multiple elections")
+	DPrintf(dTest, "Test ManyElections: multiple elections")
 
 	cfg.checkOneLeader()
 

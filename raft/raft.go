@@ -203,6 +203,7 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 
 func (rf *Raft) leaderElection() {
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
 	// 初始化参数
 	rf.currentTerm++
@@ -214,56 +215,68 @@ func (rf *Raft) leaderElection() {
 	}
 
 	rf.votedFor = rf.me
-	rf.votedFor = rf.me
 	rf.state = Candidate
-	rf.electionTimeout = time.Duration(150+rand.Intn(150)) * time.Millisecond
+	rf.updateTime = time.Now()
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
 
 	voteCount := 1 // 投给自己的票数
 	// 并行向其他服务器发送投票请求
+
+	// 需要保证在收到半数以上的选票或者选举超时后立即退出
 	var wg sync.WaitGroup
-
+	voteCh := make(chan bool, len(rf.peers)-1)
 	DPrintf(dVote, "S%d start election, term is %d", rf.me, rf.currentTerm)
-
 	for i := range rf.peers {
 		if i != rf.me {
 			wg.Add(1)
+			// 向其他服务器发送投票请求
 			go func(server int) {
 				defer wg.Done()
 				reply := RequestVoteReply{}
-
 				if rf.sendRequestVote(server, &args, &reply) {
+					// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
+					// 对应着论文中图二的rules for all servers
 					if reply.Term > rf.currentTerm {
-						// 如果发现任期号更大，则更新自己的任期号
+						// rf.mu.Lock()
 						rf.currentTerm = reply.Term
 						rf.votedFor = -1
+						rf.state = Follower
 						rf.persist()
+						// rf.mu.Unlock()
 					}
-					if reply.VoteGranted {
-						// Handle vote granted
-						voteCount++
-					}
+					voteCh <- reply.VoteGranted
+				} else {
+					voteCh <- false
 				}
 			}(i)
 		}
 	}
-	wg.Wait()
 
-	// 如果获得的选票数大于等于半数，则成为领导者
-	if voteCount > len(rf.peers)/2 {
-		rf.state = Leader  // 成为领导者
-		rf.sendHeartbeat() // 立即发送心跳
-		DPrintf(dLeader, "S%d become leader\n", rf.me)
-	} else {
-		DPrintf(dVote, "S%d election failed\n", rf.me)
+	go func() {
+		wg.Wait()
+		close(voteCh)
+	}()
+
+	timeout := time.After(rf.electionTimeout)
+	for {
+		select {
+		case voteGranted, ok := <-voteCh:
+			if !ok {
+				voteCh = nil
+			} else if voteGranted {
+				voteCount++
+			}
+			if voteCount > len(rf.peers)/2 {
+				rf.state = Leader
+				rf.sendHeartbeat()
+				DPrintf(dLeader, "S%d become leader\n", rf.me)
+				return
+			}
+		case <-timeout:
+			DPrintf(dVote, "S%d election timeout\n", rf.me)
+			return
+		}
 	}
-
-	// else if rf.state == Follower {
-	// 	// 如果在选举过程中变成了跟随者，则重置选举时间
-	// 	rf.updateTime = time.Now()
-	// 	DPrintf(dVote, "S%d become follower and election failed\n", rf.me)
-	// }
-
-	rf.mu.Unlock()
 }
 
 type AppendEntriesArgs struct {
@@ -289,7 +302,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 	if args.Entries == nil {
 		// 心跳
-		DPrintf(dInfo, "S%d receive heartbeat from leader %d\n", rf.me, args.LeaderID)
+		// DPrintf(dInfo, "S%d receive heartbeat from leader %d\n", rf.me, args.LeaderID)
 		reply.Success = true
 		rf.updateTime = time.Now()
 		rf.state = Follower

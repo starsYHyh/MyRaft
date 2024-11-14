@@ -428,8 +428,6 @@ func (cfg *config) setlongreordering(longrel bool) {
 // server thinks otherwise.
 //
 // try a few times in case re-elections are needed.
-// 检查是否有一个leader，且其他服务器没有leader
-// 为了防止重新选举，尝试几次
 func (cfg *config) checkOneLeader() int {
 	for iters := 0; iters < 10; iters++ {
 		ms := 450 + (rand.Int63() % 100)
