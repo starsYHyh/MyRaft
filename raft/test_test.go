@@ -144,7 +144,7 @@ func TestBasicAgree2B(t *testing.T) {
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
-	cfg.begin("Test (2B): basic agreement")
+	cfg.begin("Test BasicAgree: basic agreement")
 
 	iters := 3
 	for index := 1; index < iters+1; index++ {
