@@ -2,12 +2,15 @@
 import sys
 import shutil
 from typing import Optional, List, Tuple, Dict
+import re
 
 import typer
 from rich import print
 from rich.columns import Columns
 from rich.console import Console
 from rich.traceback import install
+from rich.panel import Panel
+from rich.text import Text
 
 # fmt: off
 # Mapping from topics to colors
@@ -31,7 +34,6 @@ TOPICS = {
 }
 # fmt: on
 
-
 def list_topics(value: Optional[str]):
     if value is None:
         return value
@@ -41,6 +43,23 @@ def list_topics(value: Optional[str]):
             raise typer.BadParameter(f"topic {topic} not recognized")
     return topics
 
+def print_error_message(line: str, console: Console):
+    """Print formatted error messages."""
+    if line.startswith('FAIL'):
+        console.print(line, style="bold red")
+    elif '--- FAIL:' in line:
+        match = re.match(r'--- FAIL: (\w+) \(([\d.]+)s\)', line)
+        if match:
+            test_name, duration = match.groups()
+            console.print(Text.assemble(
+                ("--- FAIL: ", "bold red"),
+                (test_name, "bold red underline"),
+                (f" ({duration}s)", "red")
+            ))
+    elif 'go' in line:
+        console.print(line, style="yellow")
+    else:
+        console.print(line)
 
 def main(
     file: typer.FileText = typer.Argument(None, help="File to read, stdin otherwise"),
@@ -64,49 +83,60 @@ def main(
     width = console.size.width
 
     panic = False
+    error_buffer = []
+    
     for line in input_:
         try:
-            time, topic, *msg = line.strip().split(" ")
-            # To ignore some topics
-            if topic not in topics:
-                continue
+            # Try to parse as normal log entry
+            parts = line.strip().split(" ")
+            if len(parts) >= 3 and not any(x in line for x in ['FAIL:', 'FAIL\t', 'config.go']):
+                time, topic, *msg = parts
+                # To ignore some topics
+                if topic not in topics:
+                    continue
 
-            msg = " ".join(msg)
+                msg = " ".join(msg)
 
-            # Debug calls from the test suite aren't associated with
-            # any particular peer. Otherwise we can treat second column
-            # as peer id
-            if topic != "TEST":
-                i = int(msg[1])
+                # Debug calls from the test suite aren't associated with
+                # any particular peer
+                if topic != "TEST":
+                    try:
+                        i = int(msg[1])
+                    except (IndexError, ValueError):
+                        print_error_message(line.strip(), console)
+                        continue
 
-            # Colorize output by using rich syntax when needed
-            if colorize and topic in TOPICS:
-                color = TOPICS[topic]
-                msg = f"[{color}]{msg}[/{color}]"
+                # Colorize output by using rich syntax when needed
+                if colorize and topic in TOPICS:
+                    color = TOPICS[topic]
+                    msg = f"[{color}]{msg}[/{color}]"
 
-            # Single column printing. Always the case for debug stmts in tests
-            if n_columns is None or topic == "TEST":
-                print(time, msg)
-            # Multi column printing, timing is dropped to maximize horizontal
-            # space. Heavylifting is done through rich.column.Columns object
+                # Single column printing. Always the case for debug stmts in tests
+                if n_columns is None or topic == "TEST":
+                    print(time, msg)
+                # Multi column printing
+                else:
+                    cols = ["" for _ in range(n_columns)]
+                    msg = "" + msg
+                    cols[i] = msg
+                    col_width = int(width / n_columns)
+                    cols = Columns(cols, width=col_width - 1, equal=True, expand=True)
+                    print(cols)
             else:
-                cols = ["" for _ in range(n_columns)]
-                msg = "" + msg
-                cols[i] = msg
-                col_width = int(width / n_columns)
-                cols = Columns(cols, width=col_width - 1, equal=True, expand=True)
-                print(cols)
-        except:
-            # Code from tests or panics does not follow format
-            # so we print it as is
-            if line.startswith("panic"):
-                panic = True
-            # Output from tests is usually important so add a
-            # horizontal line with hashes to make it more obvious
-            if not panic:
-                print("#" * console.width)
-            print(line, end="")
-
+                # Handle error messages and test output
+                if line.startswith('panic'):
+                    panic = True
+                    console.print(Panel(line.strip(), style="bold red", title="PANIC"))
+                elif any(x in line for x in ['FAIL:', 'FAIL\t', 'config.go']):
+                    # 直接打印错误信息，不再缓存
+                    print_error_message(line.strip(), console)
+                else:
+                    if not panic and line.strip():
+                        print("#" * console.width)
+                    print(line, end="")
+        except Exception as e:
+            # If parsing fails, print directly
+            print_error_message(line.strip(), console)
 
 if __name__ == "__main__":
     typer.run(main)
