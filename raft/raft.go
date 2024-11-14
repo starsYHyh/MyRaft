@@ -92,7 +92,11 @@ type Raft struct {
 
 // 返回当前任期和该服务器是否认为自己是领导者
 func (rf *Raft) GetState() (int, bool) {
-	return rf.currentTerm, rf.state == Leader
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	term := rf.currentTerm
+	isleader := rf.state == Leader
+	return term, isleader
 }
 
 // 将Raft的持久状态保存到稳定存储中，以便在崩溃和重新启动后可以检索。
@@ -121,6 +125,8 @@ func (rf *Raft) readPersist(data []byte) {
 	if d.Decode(&currentTerm) != nil || d.Decode(&votedFor) != nil || d.Decode(&log) != nil {
 		// error handling
 	} else {
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
 		rf.currentTerm = currentTerm
 		rf.votedFor = votedFor
 		rf.log = log
@@ -170,6 +176,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		如果 term < currentTerm 就返回 false
 		如果 votedFor 为空或为 candidateId，并且候选人的日志至少和接收者一样新，就投票给候选人（§5.2, §5.4）
 	*/
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	if args.Term < rf.currentTerm {
 		reply.VoteGranted = false
 		reply.Term = rf.currentTerm
@@ -211,6 +219,7 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 
 func (rf *Raft) leaderElection() {
 	// 初始化参数
+	rf.mu.Lock()
 	rf.currentTerm++
 	rf.votedFor = rf.me  // 为自己投票
 	rf.state = Candidate // 转换为候选者
@@ -221,11 +230,12 @@ func (rf *Raft) leaderElection() {
 		LastLogIndex: len(rf.log) - 1,
 		LastLogTerm:  rf.log[len(rf.log)-1].Term,
 	}
+	rf.mu.Unlock()
 
 	// 需并行向其他服务器发送投票请求，要保证在收到半数以上的选票或者选举超时后立即退出
 	var wg sync.WaitGroup
 	voteCount := 1
-	// 创建一个channel，用于接收其他服务器的投票结果，长度为peers-1
+	// 创建一个channel，用于接收其他服务器的投票结果，缓冲区大小为peers-1
 	voteCh := make(chan bool, len(rf.peers)-1)
 	DPrintf(dVote, "C%d start election, term is %d", rf.me, rf.currentTerm)
 	// 创建一个定时器，用于选举超时
@@ -273,9 +283,11 @@ func (rf *Raft) leaderElection() {
 					voteCount++
 				}
 				if voteCount > len(rf.peers)/2 {
+					rf.mu.Lock()
 					rf.state = Leader
-					rf.sendHeartbeat()
+					rf.mu.Unlock()
 					DPrintf(dLeader, "C%d become leader\n", rf.me)
+					rf.sendHeartbeat()
 					// 如果检测到自己成为了领导者，则立即退出选举
 					return
 				}
@@ -294,9 +306,6 @@ func (rf *Raft) leaderElection() {
 
 // 重新实现leaderElection函数，使用errgroup包
 func (rf *Raft) leaderElectionV2() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-
 	// 初始化参数
 	rf.currentTerm++
 	rf.votedFor = rf.me                                                       // 为自己投票
@@ -323,12 +332,12 @@ func (rf *Raft) leaderElectionV2() {
 					// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
 					// 对应着论文中图二的rules for all servers
 					if reply.Term > rf.currentTerm {
-						// rf.mu.Lock()
+						rf.mu.Lock()
 						rf.currentTerm = reply.Term
 						rf.votedFor = -1
 						rf.state = Follower
 						rf.persist()
-						// rf.mu.Unlock()
+						rf.mu.Unlock()
 					}
 					// 如果收到投票结果，则将结果发送到voteCh中
 					voteCh <- reply.VoteGranted
@@ -386,6 +395,8 @@ type AppendEntriesReply struct {
 
 // 处理附加日志条目的RPC请求
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		reply.Success = false
