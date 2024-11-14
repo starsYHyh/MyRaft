@@ -127,6 +127,11 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 }
 
+func (rf *Raft) ResetTime() {
+	rf.updateTime = time.Now()
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
+}
+
 // 服务想要切换到快照。只有在Raft没有更多最近的信息时才这样做，因为它在applyCh上通信快照。
 func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
 
@@ -185,7 +190,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.currentTerm = args.Term
 		reply.Term = rf.currentTerm
 		rf.updateTime = time.Now()
-		DPrintf(dVote, "S%d vote for %d\n", rf.me, args.CandidateID)
+		DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
 	}
 }
@@ -210,10 +215,9 @@ func (rf *Raft) leaderElection() {
 
 	// 初始化参数
 	rf.currentTerm++
-	rf.votedFor = rf.me                                                       // 为自己投票
-	rf.state = Candidate                                                      // 转换为候选者
-	rf.updateTime = time.Now()                                                // 更新选举时间
-	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond // 重新随机化选举超时时间
+	rf.votedFor = rf.me  // 为自己投票
+	rf.state = Candidate // 转换为候选者
+	rf.ResetTime()       // 重置选举时间、更新时间
 	args := RequestVoteArgs{
 		Term:         rf.currentTerm, // 当前任期
 		CandidateID:  rf.me,
@@ -226,7 +230,7 @@ func (rf *Raft) leaderElection() {
 	voteCount := 1
 	// 创建一个channel，用于接收其他服务器的投票结果，长度为peers-1
 	voteCh := make(chan bool, len(rf.peers)-1)
-	DPrintf(dVote, "S%d start election, term is %d", rf.me, rf.currentTerm)
+	DPrintf(dVote, "C%d start election, term is %d", rf.me, rf.currentTerm)
 	// 创建一个定时器，用于选举超时
 	timeout := time.After(rf.electionTimeout)
 	for i := range rf.peers {
@@ -271,13 +275,13 @@ func (rf *Raft) leaderElection() {
 			if voteCount > len(rf.peers)/2 {
 				rf.state = Leader
 				rf.sendHeartbeat()
-				DPrintf(dLeader, "S%d become leader\n", rf.me)
+				DPrintf(dLeader, "C%d become leader\n", rf.me)
 				// 如果检测到自己成为了领导者，则立即退出选举
 				return
 			}
 		case <-timeout:
 			// 如果定时器超时，则选举失败
-			DPrintf(dVote, "S%d election timeout\n", rf.me)
+			DPrintf(dVote, "C%d election timeout\n", rf.me)
 			return
 		}
 	}
@@ -384,7 +388,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 	if args.Entries == nil {
 		// 心跳
-		// DPrintf(dInfo, "S%d receive heartbeat from leader %d\n", rf.me, args.LeaderID)
+		DPrintf(dInfo, "F%d receive heartbeat from L%d\n", rf.me, args.LeaderID)
 		reply.Success = true
 		rf.updateTime = time.Now()
 		rf.state = Follower

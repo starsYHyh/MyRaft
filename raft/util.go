@@ -3,8 +3,6 @@ package raft
 import (
 	"fmt"
 	"log"
-	"os"
-	"strconv"
 	"time"
 )
 
@@ -33,10 +31,8 @@ const (
 )
 
 var debugStart time.Time
-var debugVerbosity int
 
 func init() {
-	debugVerbosity = getVerbosity()
 	debugStart = time.Now()
 
 	log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
@@ -50,19 +46,4 @@ func DPrintf(topic logTopic, format string, a ...interface{}) {
 		format = prefix + format
 		log.Printf(format, a...)
 	}
-}
-
-// Retrieve the verbosity level from an environment variable
-// 修改为从环境变量中获取日志级别
-func getVerbosity() int {
-	v := os.Getenv("VERBOSE")
-	level := 0
-	if v != "" {
-		var err error
-		level, err = strconv.Atoi(v)
-		if err != nil {
-			log.Fatalf("Invalid verbosity %v", v)
-		}
-	}
-	return level
 }
