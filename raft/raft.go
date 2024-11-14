@@ -25,10 +25,13 @@ import (
 	"MyRaft/labgob"
 	"MyRaft/labrpc"
 	"bytes"
+	"context"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // 当每个Raft对等方意识到连续的日志条目被提交时，
@@ -220,10 +223,12 @@ func (rf *Raft) leaderElection() {
 
 	// 需并行向其他服务器发送投票请求，要保证在收到半数以上的选票或者选举超时后立即退出
 	var wg sync.WaitGroup
-	voteCount := 1 // 投给自己的票数
+	voteCount := 1
 	// 创建一个channel，用于接收其他服务器的投票结果，长度为peers-1
 	voteCh := make(chan bool, len(rf.peers)-1)
 	DPrintf(dVote, "S%d start election, term is %d", rf.me, rf.currentTerm)
+	// 创建一个定时器，用于选举超时
+	timeout := time.After(rf.electionTimeout)
 	for i := range rf.peers {
 		if i != rf.me {
 			wg.Add(1)
@@ -235,12 +240,10 @@ func (rf *Raft) leaderElection() {
 					// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
 					// 对应着论文中图二的rules for all servers
 					if reply.Term > rf.currentTerm {
-						// rf.mu.Lock()
 						rf.currentTerm = reply.Term
 						rf.votedFor = -1
 						rf.state = Follower
 						rf.persist()
-						// rf.mu.Unlock()
 					}
 					// 如果收到投票结果，则将结果发送到voteCh中
 					voteCh <- reply.VoteGranted
@@ -257,8 +260,6 @@ func (rf *Raft) leaderElection() {
 		close(voteCh) // 关闭voteCh的写入端
 	}()
 
-	// 创建一个定时器，用于选举超时
-	timeout := time.After(rf.electionTimeout)
 	for {
 		select {
 		case voteGranted, ok := <-voteCh:
@@ -278,6 +279,84 @@ func (rf *Raft) leaderElection() {
 			// 如果定时器超时，则选举失败
 			DPrintf(dVote, "S%d election timeout\n", rf.me)
 			return
+		}
+	}
+}
+
+// 重新实现leaderElection函数，使用errgroup包
+func (rf *Raft) leaderElectionV2() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	// 初始化参数
+	rf.currentTerm++
+	rf.votedFor = rf.me                                                       // 为自己投票
+	rf.state = Candidate                                                      // 转换为候选者
+	rf.updateTime = time.Now()                                                // 更新选举时间
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond // 重新随机化选举超时时间
+	args := RequestVoteArgs{
+		Term:         rf.currentTerm, // 当前任期
+		CandidateID:  rf.me,
+		LastLogIndex: len(rf.log) - 1,
+		LastLogTerm:  rf.log[len(rf.log)-1].Term,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), rf.electionTimeout)
+	defer cancel()
+
+	voteCh := make(chan bool, len(rf.peers)-1)
+	var g errgroup.Group
+	for i := range rf.peers {
+		if i != rf.me {
+			g.Go(func() error {
+				reply := RequestVoteReply{}
+				if rf.sendRequestVote(i, &args, &reply) {
+					// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
+					// 对应着论文中图二的rules for all servers
+					if reply.Term > rf.currentTerm {
+						// rf.mu.Lock()
+						rf.currentTerm = reply.Term
+						rf.votedFor = -1
+						rf.state = Follower
+						rf.persist()
+						// rf.mu.Unlock()
+					}
+					// 如果收到投票结果，则将结果发送到voteCh中
+					voteCh <- reply.VoteGranted
+				} else {
+					// 如果没有收到，则发送false到voteCh中
+					voteCh <- false
+				}
+				return nil
+			})
+		}
+	}
+
+	// 等待所有请求完成
+	go func() {
+		g.Wait()
+		close(voteCh)
+	}()
+
+	voteCount := 1
+	for {
+		select {
+		case <-ctx.Done():
+			DPrintf(dVote, "S%d election timeout\n", rf.me)
+			return
+		case voteGranted, ok := <-voteCh:
+			if !ok { // 如果voteCh中已经没有了数据
+				voteCh = nil
+			} else if voteGranted { // 否则，如果收到了投票
+				voteCount++
+			}
+			if voteCount > len(rf.peers)/2 {
+				rf.state = Leader
+				rf.sendHeartbeat()
+				DPrintf(dLeader, "S%d become leader\n", rf.me)
+				// 如果检测到自己成为了领导者，则立即退出选举
+				return
+			}
 		}
 	}
 }
