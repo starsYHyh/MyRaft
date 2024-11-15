@@ -9,39 +9,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// RequestVote RPC 处理程序，响应候选人的请求
-func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	/*
-		如果 term < currentTerm 就返回 false
-		如果 votedFor 为空或为 candidateId，并且候选人的日志至少和接收者一样新，就投票给候选人（§5.2, §5.4）
-	*/
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	if args.Term < rf.currentTerm {
-		reply.VoteGranted = false
-		reply.Term = rf.currentTerm
-		return
-	}
-
-	// 如果发现任期号更大，则更新自己的任期号，转换为跟随者，将投票状态清空
-	if args.Term > rf.currentTerm {
-		rf.currentTerm = args.Term
-		rf.votedFor = -1
-		rf.state = Follower
-		rf.persist()
-	}
-
-	if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
-		reply.VoteGranted = true
-		rf.votedFor = args.CandidateID
-		rf.currentTerm = args.Term
-		reply.Term = rf.currentTerm
-		rf.updateTime = time.Now()
-		DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
-		rf.persist()
-	}
-}
-
 // 发起领导者选举
 func (rf *Raft) leaderElection() {
 	// 初始化参数
@@ -109,9 +76,15 @@ func (rf *Raft) leaderElection() {
 					voteCount++
 				}
 				if voteCount > len(rf.peers)/2 {
+
 					rf.mu.Lock()
 					rf.state = Leader
+					rf.nextIndex = make([]int, len(rf.peers))
+					for i := range rf.nextIndex {
+						rf.nextIndex[i] = len(rf.log)
+					}
 					rf.mu.Unlock()
+
 					DPrintf(dLeader, "C%d become leader\n", rf.me)
 					rf.heartBeat()
 					// 如果检测到自己成为了领导者，则立即退出选举
@@ -217,4 +190,37 @@ func (rf *Raft) leaderElectionV2() {
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	return ok
+}
+
+// RequestVote RPC 处理程序，响应候选人的请求
+func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+	/*
+		如果 term < currentTerm 就返回 false
+		如果 votedFor 为空或为 candidateId，并且候选人的日志至少和接收者一样新，就投票给候选人（§5.2, §5.4）
+	*/
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	if args.Term < rf.currentTerm {
+		reply.VoteGranted = false
+		reply.Term = rf.currentTerm
+		return
+	}
+
+	// 如果发现任期号更大，则更新自己的任期号，转换为跟随者，将投票状态清空
+	if args.Term > rf.currentTerm {
+		rf.currentTerm = args.Term
+		rf.votedFor = -1
+		rf.state = Follower
+		rf.persist()
+	}
+
+	if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
+		reply.VoteGranted = true
+		rf.votedFor = args.CandidateID
+		rf.currentTerm = args.Term
+		reply.Term = rf.currentTerm
+		rf.updateTime = time.Now()
+		DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
+		rf.persist()
+	}
 }

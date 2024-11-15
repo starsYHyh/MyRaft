@@ -557,6 +557,14 @@ func (cfg *config) wait(index int, n int, startTerm int) interface{} {
 // times, in case a leader fails just after Start().
 // if retry==false, calls Start() only once, in order
 // to simplify the early Lab 2B tests.
+// 完成一次完整的协议。
+// 它可能最初选择了错误的领导者，并且在放弃后必须重新提交。
+// 大约10秒后完全放弃。
+// 间接检查服务器是否同意相同的值，因为 nCommitted() 会检查这一点，
+// 以及从 applyCh 读取的线程。
+// 返回索引。
+// 如果 retry==true，可能会多次提交命令，以防领导者在 Start() 后立即失败。
+// 如果 retry==false，只调用一次 Start()，以简化早期的 Lab 2B 测试。
 func (cfg *config) one(cmd interface{}, expectedServers int, retry bool) int {
 	t0 := time.Now()
 	starts := 0
@@ -594,6 +602,7 @@ func (cfg *config) one(cmd interface{}, expectedServers int, retry bool) int {
 					}
 				}
 				time.Sleep(20 * time.Millisecond)
+				// DPrintf(dWarn, "length of logs is %d", len(cfg.logs))
 			}
 			if !retry {
 				cfg.t.Fatalf("one(%v) failed to reach agreement", cmd)

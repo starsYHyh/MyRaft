@@ -66,6 +66,8 @@ type Raft struct {
 	persister *Persister          // Object to hold this peer's persisted state
 	me        int                 // this peer's index into peers[]
 	dead      int32               // set by Kill()
+	applyCh   chan ApplyMsg       // 服务或测试人员希望Raft发送ApplyMsg消息的通道
+	applyCond *sync.Cond          // 用于通知applyCh有新的日志条目
 
 	// 根据图2的描述，Raft服务器必须维护什么状态
 	// 所有服务器上的持久性状态（在响应 RPC 之前更新稳定存储）
@@ -77,7 +79,7 @@ type Raft struct {
 	state           int           // 服务器的状态（跟随者、候选人、领导者）
 	commitIndex     int           // 已知已提交的最高日志条目的索引（初始化为 0，单调增加）
 	lastApplied     int           // 应用于状态机的最高日志条目的索引（初始化为 0，单调增加）
-	updateTime      time.Time     // 距离上次收到心跳的时间，或开始选举的时间
+	updateTime      time.Time     // 上次收到心跳的时间，或开始选举的时间
 	electionTimeout time.Duration // 选举超时时间
 
 	// 领导者服务器上的易失状态（选举后重新初始化）
@@ -181,24 +183,6 @@ type AppendEntriesReply struct {
 	Success bool // 	如果跟随者包含与 prevLogIndex 和 prevLogTerm 匹配的条目，则为 true
 }
 
-// 使用Raft的服务（例如k/v服务器）希望开始对要附加到Raft日志的下一个命令达成一致。
-// 如果此服务器不是领导者，则返回false。否则，开始协议并立即返回。
-// 不能保证此命令将被提交到Raft日志中，因为领导者可能会失败或丢失选举。
-// 即使Raft实例已被终止，此函数也应优雅地返回。
-//
-// 第一个返回值是命令将出现的索引（如果它被提交的话）。
-// 第二个返回值是当前任期。
-// 第三个返回值是如果此服务器认为自己是领导者，则为true。
-func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := true
-
-	// Your code here (2B).
-
-	return index, term, isLeader
-}
-
 // 测试人员在每次测试后不会停止Raft创建的goroutine，但它确实调用了Kill()方法。
 // 您的代码可以使用killed()来检查是否已调用Kill()。使用原子操作避免了锁的需要。
 //
@@ -258,12 +242,16 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.votedFor = -1             // 未投票
 	rf.log = make([]LogEntry, 1) // 索引从1开始
 	rf.log[0] = LogEntry{0, nil} // 第0个日志条目为空
+	rf.commitIndex = 0           // 已知已提交的最高日志条目的索引
 
-	// initialize from state persisted before a crash
+	rf.applyCh = applyCh
+	rf.applyCond = sync.NewCond(&rf.mu)
+
 	rf.readPersist(persister.ReadRaftState())
 
-	// start ticker goroutine to start elections
 	go rf.ticker()
+
+	go rf.applyLog()
 
 	return rf
 }

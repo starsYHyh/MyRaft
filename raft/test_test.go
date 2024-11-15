@@ -140,11 +140,12 @@ func TestManyElections2A(t *testing.T) {
 }
 
 func TestBasicAgree2B(t *testing.T) {
-	servers := 3
+	servers := 5
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
 	cfg.begin("Test BasicAgree: basic agreement")
+	DPrintf(dTest, "Test BasicAgree: basic agreement")
 
 	iters := 3
 	for index := 1; index < iters+1; index++ {
@@ -164,12 +165,14 @@ func TestBasicAgree2B(t *testing.T) {
 
 // check, based on counting bytes of RPCs, that
 // each command is sent to each peer just once.
+// 检查基于RPC的字节计数，确保每个命令只发送给每个对等方一次。
 func TestRPCBytes2B(t *testing.T) {
 	servers := 3
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
 	cfg.begin("Test (2B): RPC byte count")
+	DPrintf(dTest, "Test RPCBytes: RPC byte count")
 
 	cfg.one(99, servers, false)
 	bytes0 := cfg.bytesTotal()
@@ -196,12 +199,13 @@ func TestRPCBytes2B(t *testing.T) {
 }
 
 // test just failure of followers.
-func For2023TestFollowerFailure2B(t *testing.T) {
+func TestFollowerFailure2B(t *testing.T) {
 	servers := 3
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
 	cfg.begin("Test (2B): test progressive failure of followers")
+	DPrintf(dTest, "Test FollowerFailure: test progressive failure of followers")
 
 	cfg.one(101, servers, false)
 
@@ -241,8 +245,8 @@ func For2023TestFollowerFailure2B(t *testing.T) {
 }
 
 // test just failure of leaders.
-func For2023TestLeaderFailure2B(t *testing.T) {
-	servers := 3
+func TestLeaderFailure2B(t *testing.T) {
+	servers := 7
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
