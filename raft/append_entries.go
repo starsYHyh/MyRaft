@@ -102,15 +102,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.log = append(rf.log, LogEntry{Term: rf.currentTerm, Command: command})
 	rf.mu.Unlock()
 
-	args := AppendEntriesArgs{
-		Term:         rf.currentTerm,
-		LeaderID:     rf.me,
-		Entries:      []LogEntry{{Term: rf.currentTerm, Command: command}},
-		PrevLogIndex: index,
-		PrevLogTerm:  term,
-		LeaderCommit: index,
-	}
-
 	var wg sync.WaitGroup
 	commitCount := 1
 	commitCh := make(chan bool, len(rf.peers)-1)
@@ -121,6 +112,18 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 			wg.Add(1)
 			go func(server int) {
 				defer wg.Done()
+				rf.mu.Lock()
+				// 如果 lastLogIndex ≥ 跟随者的 nextIndex：发送包含从 nextIndex 开始的日志条目的 AppendEntries RPC
+				logEntry := rf.log[rf.nextIndex[server]:]
+				args := AppendEntriesArgs{
+					Term:         rf.currentTerm,
+					LeaderID:     rf.me,
+					Entries:      logEntry,
+					PrevLogIndex: index,
+					PrevLogTerm:  term,
+					LeaderCommit: index,
+				}
+				rf.mu.Unlock()
 				reply := AppendEntriesReply{}
 				if rf.sendAppendEntries(server, &args, &reply) {
 					// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空

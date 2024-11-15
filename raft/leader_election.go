@@ -23,6 +23,7 @@ func (rf *Raft) leaderElection() {
 		LastLogIndex: len(rf.log) - 1,
 		LastLogTerm:  rf.log[len(rf.log)-1].Term,
 	}
+	DPrintf(dVote, "C%d start election, term is %d", rf.me, rf.currentTerm)
 	rf.mu.Unlock()
 
 	// 需并行向其他服务器发送投票请求，要保证在收到半数以上的选票或者选举超时后立即退出
@@ -30,7 +31,6 @@ func (rf *Raft) leaderElection() {
 	voteCount := 1
 	// 创建一个channel，用于接收其他服务器的投票结果，缓冲区大小为peers-1
 	voteCh := make(chan bool, len(rf.peers)-1)
-	DPrintf(dVote, "C%d start election, term is %d", rf.me, rf.currentTerm)
 	// 创建一个定时器，用于选举超时
 	timeout := time.After(rf.electionTimeout)
 	for i := range rf.peers {
