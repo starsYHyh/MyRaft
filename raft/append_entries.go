@@ -45,15 +45,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 	// 心跳
 	if args.Entries == nil {
-		DPrintf(dInfo, "F%d receive heartbeat from L%d\n", rf.me, args.LeaderID)
+		// DPrintf(dInfo, "F%d receive heartbeat from L%d\n", rf.me, args.LeaderID)
 		reply.Success = true
 		rf.updateTime = time.Now()
 		rf.state = Follower
 	} else {
 		// 非心跳，正常的日志条目
 		// 如果日志在 prevLogIndex 处不匹配，则返回 false
+		// DPrintf(dInfo, "F%d received entry from L%d\n", rf.me, args.LeaderID)
 		if len(rf.log) != args.PrevLogIndex+1 {
-			DPrintf(dInfo, "F%d logLength is %d but Prevlogindex is %d\n", rf.me, len(rf.log), args.PrevLogIndex)
+			DPrintf(dInfo, "F%d nextIndex is %d but prevlogindex is %d\n", rf.me, len(rf.log), args.PrevLogIndex)
 			reply.Success = false
 			reply.Term = rf.currentTerm
 			return
@@ -65,9 +66,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
-		preCommitIndex := rf.commitIndex
 		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
-		DPrintf(dCommit, "F%d update commitIndex from %d to %d\n", rf.me, preCommitIndex, min(args.LeaderCommit, len(rf.log)-1))
+		// DPrintf(dCommit, "F%d update commitIndex to %d\n", rf.me, rf.commitIndex)
 		rf.applyCondSignal()
 	}
 
@@ -85,29 +85,19 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // 第二个返回值是当前任期。
 // 第三个返回值是如果此服务器认为自己是领导者，则为true。
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term, isLeader := rf.GetState()
-
 	// 如果此服务器不是领导者，则返回false
-	if !isLeader {
-		return index, term, isLeader
+	if rf.state != Leader {
+		return 0, 0, false
 	}
 	// 否则，接受command并将其附加到日志中，并发送到其他服务器上
 	// 附加日志条目
 
 	rf.mu.Lock()
-	// 使用index和term记录添加日志之前的index和term
-	index = rf.commitIndex
-	term = rf.log[index].Term
-	rf.log = append(rf.log, LogEntry{Term: rf.currentTerm, Command: command})
-	args := AppendEntriesArgs{
-		Term:         rf.currentTerm,
-		LeaderID:     rf.me,
-		Entries:      []LogEntry{{Term: rf.currentTerm, Command: command}},
-		PrevLogIndex: index,
-		PrevLogTerm:  term,
-		LeaderCommit: index,
-	}
+	// 将新的日志添加到日志中
+	currentTerm, _ := rf.GetState()
+	rf.log = append(rf.log, LogEntry{Term: currentTerm, Command: command})
+	rf.recvdIndex++
+	recvdIndex := rf.recvdIndex
 	rf.mu.Unlock()
 
 	var wg sync.WaitGroup
@@ -120,22 +110,44 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 			wg.Add(1)
 			go func(server int) {
 				defer wg.Done()
+				rf.mu.Lock()
+				// 如果 lastLogIndex ≥ 跟随者的 nextIndex：发送包含从 nextIndex 开始的日志条目的 AppendEntries RPC
+				prevLogIndex := rf.nextIndex[server] - 1
+				prevLogTerm := rf.log[prevLogIndex].Term
+				logEntry := rf.log[rf.nextIndex[server]:]
+				DPrintf(dInfo, "L%d: length of log is %d and nextindex is %d", rf.me, recvdIndex, prevLogIndex+1)
+				args := AppendEntriesArgs{
+					Term:         currentTerm,
+					LeaderID:     rf.me,
+					Entries:      logEntry,
+					PrevLogIndex: prevLogIndex,
+					PrevLogTerm:  prevLogTerm,
+					LeaderCommit: rf.commitIndex,
+				}
+				rf.mu.Unlock()
 				reply := AppendEntriesReply{}
 				if rf.sendAppendEntries(server, &args, &reply) {
 					// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
 					// 对应着论文中图二的rules for all servers
 					rf.mu.Lock()
-					if reply.Term > rf.currentTerm {
+					if reply.Term > currentTerm {
 						rf.currentTerm = reply.Term
 						rf.votedFor = -1
 						rf.state = Follower
 						rf.persist()
 					}
 					rf.mu.Unlock()
-					// 如果收到投票结果，则将结果发送到voteCh中
+					// 如果收到复制结果，则将结果发送到commitCh中
 					commitCh <- reply.Success
+					// 如果成功，则更新nextIndex
+					if reply.Success {
+						rf.nextIndex[i] = recvdIndex + 1
+					} else {
+						// 递减nextindex，并不断重试
+						DPrintf(dWarn, "F%d failed to duplicate\n", i)
+					}
 				} else {
-					// 如果没有收到，则发送false到voteCh中
+					// 如果没有收到，则发送false到commitCh中
 					commitCh <- false
 				}
 			}(i)
@@ -152,9 +164,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		if rf.state == Leader {
 			select {
 			case <-timeout:
-				// 如果到一定时间都没有收到半数以上的服务器提交成功，则立即返回本领导者上一次提交的index和term
+				// 如果到一定时间都没有收到半数以上的服务器提交成功，则立即返回
 				DPrintf(dCommit, "L%d commit failed\n", rf.me)
-				return index, term, isLeader
+				return recvdIndex, currentTerm, true
 			case sucess, ok := <-commitCh:
 				if !ok {
 					commitCh = nil
@@ -164,21 +176,18 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 				if commitCount > len(rf.peers)/2 {
 					// 如果提交成功，则更新index和term
 					rf.mu.Lock()
-					rf.commitIndex = len(rf.log) - 1
-					index = rf.commitIndex
-					term = rf.currentTerm
+					rf.commitIndex = recvdIndex
 					rf.mu.Unlock()
-					DPrintf(dCommit, "L%d commitIndex is %d\n", rf.me, index)
+					DPrintf(dCommit, "L%d update commitIndex to %d\n", rf.me, rf.commitIndex)
 					rf.applyCondSignal()
-					return index, term, isLeader
+					return recvdIndex, currentTerm, true
 				}
 
 			}
 		} else {
 			// 如果检测到在选举过程中由候选者变成了跟随者，例如任期原因，则立即退出选举
-			isLeader = false
 			DPrintf(dVote, "L%d become follower\n", rf.me)
-			return index, term, isLeader
+			return recvdIndex, currentTerm, false
 		}
 	}
 }
@@ -196,7 +205,7 @@ func (rf *Raft) applyLog() {
 	for !rf.killed() {
 		if rf.commitIndex > rf.lastApplied {
 			// 将日志应用到状态机
-			preApplied := rf.lastApplied
+			// preApplied := rf.lastApplied
 			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
 				rf.applyCh <- ApplyMsg{
 					CommandValid: true,
@@ -205,7 +214,7 @@ func (rf *Raft) applyLog() {
 				}
 			}
 			rf.lastApplied = rf.commitIndex
-			DPrintf(dInfo, "F%d applied log from %d to %d\n", rf.me, preApplied, rf.commitIndex)
+			// DPrintf(dInfo, "F%d applied log from %d to %d\n", rf.me, preApplied, rf.commitIndex)
 		} else {
 			// rf.applyCond.Wait() 调用了 c.L.Unlock() 来释放锁，然后进入等待状态。
 			// 当条件满足时，线程会被唤醒并重新获取锁（通过 c.L.Lock()），然后继续执行。
