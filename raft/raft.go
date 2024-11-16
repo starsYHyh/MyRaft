@@ -86,6 +86,7 @@ type Raft struct {
 
 	// 领导者服务器上的易失状态（选举后重新初始化）
 
+	recvdIndex    int           // 已知收到的最后一个日志条目的索引，即为日志长度，（初始化为 0，单调增加）
 	nextIndex     []int         // 对于每个服务器，发送到该服务器的下一个日志条目的索引（初始化为领导者最后一个日志索引 + 1）
 	matchIndex    []int         // 对于每个服务器，已知在服务器上复制的最高日志条目的索引（初始化为 0，单调增加）
 	heartBeatTime time.Duration // 心跳时间
@@ -93,8 +94,6 @@ type Raft struct {
 
 // 返回当前任期和该服务器是否认为自己是领导者
 func (rf *Raft) GetState() (int, bool) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	term := rf.currentTerm
 	isleader := rf.state == Leader
 	return term, isleader

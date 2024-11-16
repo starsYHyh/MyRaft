@@ -83,6 +83,7 @@ func (rf *Raft) leaderElection() {
 					for i := range rf.nextIndex {
 						rf.nextIndex[i] = len(rf.log)
 					}
+					rf.recvdIndex = len(rf.log) - 1
 					rf.mu.Unlock()
 
 					DPrintf(dLeader, "C%d become leader\n", rf.me)
