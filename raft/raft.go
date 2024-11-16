@@ -136,10 +136,8 @@ func (rf *Raft) readPersist(data []byte) {
 
 // 重置更新时间、随机化选举超时时间
 func (rf *Raft) resetTime() {
-	rf.mu.Lock()
 	rf.updateTime = time.Now()
 	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
-	rf.mu.Unlock()
 }
 
 // 服务想要切换到快照。只有在Raft没有更多最近的信息时才这样做，因为它在applyCh上通信快照。
