@@ -67,15 +67,17 @@ type Raft struct {
 	me        int                 // this peer's index into peers[]
 	dead      int32               // set by Kill()
 	applyCh   chan ApplyMsg       // 服务或测试人员希望Raft发送ApplyMsg消息的通道
-	applyCond *sync.Cond          // 用于通知applyCh有新的日志条目
+	applyCond *sync.Cond          // 用于通知applyCh有新的日志条目需要应用
 
 	// 根据图2的描述，Raft服务器必须维护什么状态
 	// 所有服务器上的持久性状态（在响应 RPC 之前更新稳定存储）
+
 	currentTerm int        // 服务器最后一次知道的任期号（初始化为 0，持续递增）
 	votedFor    int        // 在当前任期内获得投票的候选者的ID（如果没有则为 null）
 	log         []LogEntry // 日志条目集；每个条目包含状态机命令以及领导者收到条目时的任期（第一个索引为 1）
 
 	// 所有服务器上的易失性状态
+
 	state           int           // 服务器的状态（跟随者、候选人、领导者）
 	commitIndex     int           // 已知已提交的最高日志条目的索引（初始化为 0，单调增加）
 	lastApplied     int           // 应用于状态机的最高日志条目的索引（初始化为 0，单调增加）
@@ -83,8 +85,9 @@ type Raft struct {
 	electionTimeout time.Duration // 选举超时时间
 
 	// 领导者服务器上的易失状态（选举后重新初始化）
+
 	nextIndex     []int         // 对于每个服务器，发送到该服务器的下一个日志条目的索引（初始化为领导者最后一个日志索引 + 1）
-	matchIndex    []int         //	对于每个服务器，已知在服务器上复制的最高日志条目的索引（初始化为 0，单调增加）
+	matchIndex    []int         // 对于每个服务器，已知在服务器上复制的最高日志条目的索引（初始化为 0，单调增加）
 	heartBeatTime time.Duration // 心跳时间
 }
 
@@ -124,10 +127,10 @@ func (rf *Raft) readPersist(data []byte) {
 		// error handling
 	} else {
 		rf.mu.Lock()
-		defer rf.mu.Unlock()
 		rf.currentTerm = currentTerm
 		rf.votedFor = votedFor
 		rf.log = log
+		defer rf.mu.Unlock()
 	}
 }
 
