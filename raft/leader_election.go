@@ -1,12 +1,8 @@
 package raft
 
 import (
-	"context"
-	"math/rand"
 	"sync"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 // 发起领导者选举
@@ -104,81 +100,6 @@ func (rf *Raft) leaderElection() {
 	}
 }
 
-// 重新实现leaderElection函数，使用errgroup包
-func (rf *Raft) leaderElectionV2() {
-	// 初始化参数
-	rf.currentTerm++
-	rf.votedFor = rf.me                                                       // 为自己投票
-	rf.state = Candidate                                                      // 转换为候选者
-	rf.updateTime = time.Now()                                                // 更新选举时间
-	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond // 重新随机化选举超时时间
-	args := RequestVoteArgs{
-		Term:         rf.currentTerm, // 当前任期
-		CandidateID:  rf.me,
-		LastLogIndex: len(rf.log) - 1,
-		LastLogTerm:  rf.log[len(rf.log)-1].Term,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), rf.electionTimeout)
-	defer cancel()
-
-	voteCh := make(chan bool, len(rf.peers)-1)
-	var g errgroup.Group
-	for i := range rf.peers {
-		if i != rf.me {
-			g.Go(func() error {
-				reply := RequestVoteReply{}
-				if rf.sendRequestVote(i, &args, &reply) {
-					// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
-					// 对应着论文中图二的rules for all servers
-					if reply.Term > rf.currentTerm {
-						rf.mu.Lock()
-						rf.currentTerm = reply.Term
-						rf.votedFor = -1
-						rf.state = Follower
-						rf.persist()
-						rf.mu.Unlock()
-					}
-					// 如果收到投票结果，则将结果发送到voteCh中
-					voteCh <- reply.VoteGranted
-				} else {
-					// 如果没有收到，则发送false到voteCh中
-					voteCh <- false
-				}
-				return nil
-			})
-		}
-	}
-
-	// 等待所有请求完成
-	go func() {
-		g.Wait()
-		close(voteCh)
-	}()
-
-	voteCount := 1
-	for {
-		select {
-		case <-ctx.Done():
-			DPrintf(dVote, "S%d election timeout\n", rf.me)
-			return
-		case voteGranted, ok := <-voteCh:
-			if !ok { // 如果voteCh中已经没有了数据
-				voteCh = nil
-			} else if voteGranted { // 否则，如果收到了投票
-				voteCount++
-			}
-			if voteCount > len(rf.peers)/2 {
-				rf.state = Leader
-				rf.heartBeat()
-				DPrintf(dLeader, "S%d become leader\n", rf.me)
-				// 如果检测到自己成为了领导者，则立即退出选举
-				return
-			}
-		}
-	}
-}
-
 // 向服务器发送RequestVote RPC，期望arg中的RPC参数，用RPC回复填充*reply，因此调用者应传递&reply。
 // 传递给Call()的args和reply的类型必须与处理程序函数中声明的参数的类型相同（包括它们是否为指针）。
 //
@@ -221,7 +142,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.currentTerm = args.Term
 		reply.Term = rf.currentTerm
 		rf.updateTime = time.Now()
-		DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
+		// DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
 	}
 }

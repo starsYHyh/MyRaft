@@ -39,9 +39,14 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.state = Follower
 		rf.persist()
 	} else if args.Term < rf.currentTerm {
-		reply.Term = rf.currentTerm
-		reply.Success = false
-		return
+		// Raft 通过比较日志中最后一个条目的索引和任期来确定两个日志中哪个更新。
+		// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
+		if (rf.log[len(rf.log)-1].Term > args.PrevLogTerm) || (rf.log[len(rf.log)-1].Term == args.PrevLogTerm && len(rf.log)-1 > args.PrevLogIndex) {
+			// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", rf.me, args.LeaderID, args.Term, rf.currentTerm)
+			reply.Term = rf.currentTerm
+			reply.Success = false
+			return
+		}
 	}
 	// 心跳
 	if args.Entries == nil {
@@ -52,9 +57,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	} else {
 		// 非心跳，正常的日志条目
 		// 如果日志在 prevLogIndex 处不匹配，则返回 false
-		// DPrintf(dInfo, "F%d received entry from L%d\n", rf.me, args.LeaderID)
 		if len(rf.log) != args.PrevLogIndex+1 {
-			DPrintf(dInfo, "F%d nextIndex is %d but prevlogindex is %d\n", rf.me, len(rf.log), args.PrevLogIndex)
+			DPrintf(dInfo, "F%d MISMATCH  lastIndex is %d but prevlogindex is %d\n", rf.me, len(rf.log), args.PrevLogIndex)
 			reply.Success = false
 			reply.Term = rf.currentTerm
 			return
@@ -67,7 +71,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
-		// DPrintf(dCommit, "F%d update commitIndex to %d\n", rf.me, rf.commitIndex)
+		DPrintf(dCommit, "F%d update commitIndex to %d\n", rf.me, rf.commitIndex)
 		rf.applyCondSignal()
 	}
 
@@ -87,6 +91,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	// 如果此服务器不是领导者，则返回false
 	if rf.state != Leader {
+		// DPrintf(dDrop, "F%d is not leader and cannot receive command %v\n", rf.me, command)
 		return 0, 0, false
 	}
 	// 否则，接受command并将其附加到日志中，并发送到其他服务器上
@@ -97,59 +102,128 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	currentTerm, _ := rf.GetState()
 	rf.log = append(rf.log, LogEntry{Term: currentTerm, Command: command})
 	rf.recvdIndex++
+	rf.nextIndex[rf.me] = rf.recvdIndex + 1
 	recvdIndex := rf.recvdIndex
 	rf.mu.Unlock()
+	DPrintf(dInfo, "L%d received command %v\n", rf.me, command)
 
 	var wg sync.WaitGroup
 	commitCount := 1
 	commitCh := make(chan bool, len(rf.peers)-1)
 	timeout := time.After(rf.electionTimeout)
 
+	DPrintf(dInfo, "L%d nextIndex is %v\n", rf.me, rf.nextIndex)
 	for i := range rf.peers {
 		if i != rf.me {
 			wg.Add(1)
 			go func(server int) {
 				defer wg.Done()
-				rf.mu.Lock()
-				// 如果 lastLogIndex ≥ 跟随者的 nextIndex：发送包含从 nextIndex 开始的日志条目的 AppendEntries RPC
-				prevLogIndex := rf.nextIndex[server] - 1
-				prevLogTerm := rf.log[prevLogIndex].Term
-				logEntry := rf.log[rf.nextIndex[server]:]
-				DPrintf(dInfo, "L%d: length of log is %d and nextindex is %d", rf.me, recvdIndex, prevLogIndex+1)
-				args := AppendEntriesArgs{
-					Term:         currentTerm,
-					LeaderID:     rf.me,
-					Entries:      logEntry,
-					PrevLogIndex: prevLogIndex,
-					PrevLogTerm:  prevLogTerm,
-					LeaderCommit: rf.commitIndex,
-				}
-				rf.mu.Unlock()
-				reply := AppendEntriesReply{}
-				if rf.sendAppendEntries(server, &args, &reply) {
-					// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
-					// 对应着论文中图二的rules for all servers
+				for {
+					if rf.state != Leader {
+						return
+					}
+
 					rf.mu.Lock()
-					if reply.Term > currentTerm {
-						rf.currentTerm = reply.Term
-						rf.votedFor = -1
-						rf.state = Follower
-						rf.persist()
+					prevLogIndex := rf.nextIndex[server] - 1
+					prevLogTerm := rf.log[prevLogIndex].Term
+					logEntry := rf.log[prevLogIndex+1:]
+					args := AppendEntriesArgs{
+						Term:         currentTerm,
+						LeaderID:     rf.me,
+						Entries:      logEntry,
+						PrevLogIndex: prevLogIndex,
+						PrevLogTerm:  prevLogTerm,
+						LeaderCommit: rf.commitIndex,
 					}
 					rf.mu.Unlock()
-					// 如果收到复制结果，则将结果发送到commitCh中
-					commitCh <- reply.Success
-					// 如果成功，则更新nextIndex
-					if reply.Success {
-						rf.nextIndex[i] = recvdIndex + 1
+					// DPrintf(dInfo, "L%d send entry %v to F%d\n", rf.me, logEntry, server)
+					reply := AppendEntriesReply{}
+					if rf.sendAppendEntries(server, &args, &reply) {
+						// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
+						// 对应着论文中图二的rules for all servers
+						rf.mu.Lock()
+						if reply.Term > currentTerm {
+							rf.currentTerm = reply.Term
+							rf.votedFor = -1
+							rf.state = Follower
+							rf.persist()
+						}
+						rf.mu.Unlock()
+						if reply.Success { // 如果成功，则更新nextIndex
+							rf.mu.Lock()
+							rf.nextIndex[server]++
+							rf.mu.Unlock()
+							// 如果收到复制结果，则将结果发送到commitCh中
+							commitCh <- reply.Success
+							return
+						} else { // 如果失败，则递减nextIndex，并不断重试
+							DPrintf(dWarn, "L%d retry to send entry to F%d\n", rf.me, server)
+							rf.nextIndex[server]--
+						}
 					} else {
-						// 递减nextindex，并不断重试
-						DPrintf(dWarn, "F%d failed to duplicate\n", i)
+						commitCh <- false
 					}
-				} else {
-					// 如果没有收到，则发送false到commitCh中
-					commitCh <- false
+
 				}
+
+				// rf.mu.Lock()
+				// // 如果 lastLogIndex ≥ 跟随者的 nextIndex：发送包含从 nextIndex 开始的日志条目的 AppendEntries RPC
+				// prevLogIndex := rf.nextIndex[server] - 1
+				// prevLogTerm := rf.log[prevLogIndex].Term
+				// logEntry := rf.log[rf.nextIndex[server]:]
+				// args := AppendEntriesArgs{
+				// 	Term:         currentTerm,
+				// 	LeaderID:     rf.me,
+				// 	Entries:      logEntry,
+				// 	PrevLogIndex: prevLogIndex,
+				// 	PrevLogTerm:  prevLogTerm,
+				// 	LeaderCommit: rf.commitIndex,
+				// }
+				// rf.mu.Unlock()
+				// reply := AppendEntriesReply{}
+				// if rf.sendAppendEntries(server, &args, &reply) {
+				// 	// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
+				// 	// 对应着论文中图二的rules for all servers
+				// 	rf.mu.Lock()
+				// 	if reply.Term > currentTerm {
+				// 		rf.currentTerm = reply.Term
+				// 		rf.votedFor = -1
+				// 		rf.state = Follower
+				// 		rf.persist()
+				// 	}
+				// 	rf.mu.Unlock()
+				// 	// 如果收到复制结果，则将结果发送到commitCh中
+				// 	commitCh <- reply.Success
+				// 	// 如果成功，则更新nextIndex
+				// 	if reply.Success {
+				// 		rf.mu.Lock()
+				// 		rf.nextIndex[server]++
+				// 		rf.mu.Unlock()
+				// 	} else {
+				// 		DPrintf(dWarn, "F%d failed to duplicate\n", i)
+				// 		// 递减nextindex，并不断重试
+				// 		for {
+				// 			rf.mu.Lock()
+				// 			rf.nextIndex[server]--
+				// 			args.PrevLogIndex = rf.nextIndex[server] - 1
+				// 			args.PrevLogTerm = rf.log[args.PrevLogIndex].Term
+				// 			args.Entries = rf.log[rf.nextIndex[server]:]
+				// 			rf.mu.Unlock()
+				// 			DPrintf(dInfo, "L%d retry to duplicate entry to F%d\n", rf.me, server)
+				// 			if rf.sendAppendEntries(server, &args, &reply) {
+				// 				if reply.Success {
+				// 					rf.mu.Lock()
+				// 					rf.nextIndex[server]++
+				// 					rf.mu.Unlock()
+				// 					break
+				// 				}
+				// 			}
+				// 		}
+				// 	}
+				// } else {
+				// 	// 如果没有收到，则发送false到commitCh中
+				// 	commitCh <- false
+				// }
 			}(i)
 		}
 	}

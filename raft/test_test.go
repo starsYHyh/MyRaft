@@ -253,12 +253,14 @@ func TestLeaderFailure2B(t *testing.T) {
 	defer cfg.cleanup()
 
 	cfg.begin("Test (2B): test failure of leaders")
+	DPrintf(dTest, "Test LeaderFailure: test failure of leaders")
 
 	cfg.one(101, servers, false)
 
 	// disconnect the first leader.
 	leader1 := cfg.checkOneLeader()
 	cfg.disconnect(leader1)
+	DPrintf(dLog, "L%d disconnected", leader1)
 
 	// the remaining followers should elect
 	// a new leader.
@@ -269,8 +271,11 @@ func TestLeaderFailure2B(t *testing.T) {
 	// disconnect the new leader.
 	leader2 := cfg.checkOneLeader()
 	cfg.disconnect(leader2)
+	DPrintf(dLog, "L%d disconnected", leader2)
 
+	// 失去领导者之后立即发送一个命令，按照预期来说，这个命令不会被提交
 	// submit a command to each server.
+	// 但是该段的问题出在，实际上，这些start的命令并不一定在几毫秒内都会执行，有可能隔着几百毫秒，导致在其间选出了新的leader，从而导致这个命令被提交
 	for i := 0; i < servers; i++ {
 		cfg.rafts[i].Start(104)
 	}
@@ -293,6 +298,7 @@ func TestFailAgree2B(t *testing.T) {
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
+	DPrintf(dTest, "Test FailAgree: follower and re-connect")
 	cfg.begin("Test (2B): agreement after follower reconnects")
 
 	cfg.one(101, servers, false)
@@ -338,6 +344,7 @@ func TestFailNoAgree2B(t *testing.T) {
 	cfg.disconnect((leader + 1) % servers)
 	cfg.disconnect((leader + 2) % servers)
 	cfg.disconnect((leader + 3) % servers)
+	DPrintf(dLog, "F%d, F%d, F%d disconnected", (leader+1)%servers, (leader+2)%servers, (leader+3)%servers)
 
 	index, _, ok := cfg.rafts[leader].Start(20)
 	if ok != true {
@@ -358,6 +365,7 @@ func TestFailNoAgree2B(t *testing.T) {
 	cfg.connect((leader + 1) % servers)
 	cfg.connect((leader + 2) % servers)
 	cfg.connect((leader + 3) % servers)
+	DPrintf(dLog, "F%d, F%d, F%d reconnected", (leader+1)%servers, (leader+2)%servers, (leader+3)%servers)
 
 	// the disconnected majority may have chosen a leader from
 	// among their own ranks, forgetting index 2.
