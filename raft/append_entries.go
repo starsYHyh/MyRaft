@@ -100,8 +100,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	index = rf.commitIndex
 	term = rf.log[index].Term
 	rf.log = append(rf.log, LogEntry{Term: rf.currentTerm, Command: command})
-	rf.mu.Unlock()
-
 	args := AppendEntriesArgs{
 		Term:         rf.currentTerm,
 		LeaderID:     rf.me,
@@ -110,6 +108,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		PrevLogTerm:  term,
 		LeaderCommit: index,
 	}
+	rf.mu.Unlock()
 
 	var wg sync.WaitGroup
 	commitCount := 1
