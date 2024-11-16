@@ -127,10 +127,10 @@ func (rf *Raft) readPersist(data []byte) {
 		// error handling
 	} else {
 		rf.mu.Lock()
+		defer rf.mu.Unlock()
 		rf.currentTerm = currentTerm
 		rf.votedFor = votedFor
 		rf.log = log
-		defer rf.mu.Unlock()
 	}
 }
 
