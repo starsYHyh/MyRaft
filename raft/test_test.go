@@ -608,7 +608,7 @@ func TestCount2B(t *testing.T) {
 		return
 	}
 
-	leader := cfg.checkOneLeader()
+	cfg.checkOneLeader()
 
 	total1 := rpcs()
 
@@ -618,6 +618,7 @@ func TestCount2B(t *testing.T) {
 
 	var total2 int
 	var success bool
+	var leader int
 loop:
 	for try := 0; try < 5; try++ {
 		if try > 0 {

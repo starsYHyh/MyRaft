@@ -17,8 +17,8 @@ func (rf *Raft) leaderElection() {
 	args := RequestVoteArgs{
 		Term:         rf.currentTerm, // 当前任期
 		CandidateID:  me,
-		LastLogIndex: len(rf.log) - 1,
-		LastLogTerm:  rf.log[len(rf.log)-1].Term,
+		LastLogIndex: rf.recvdIndex,
+		LastLogTerm:  rf.log[rf.recvdIndex].Term,
 	}
 	DPrintf(dVote, "C%d start election, term is %d", me, rf.currentTerm)
 	rf.mu.Unlock()
@@ -130,7 +130,17 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 
+	// if (rf.log[rf.recvdIndex].Term > args.LastLogTerm) || (rf.log[rf.recvdIndex].Term == args.LastLogTerm && rf.recvdIndex > args.LastLogIndex) {
+	// 	// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", me, args.LeaderID, args.Term, rf.currentTerm)
+	// 	reply.Term = rf.currentTerm
+	// 	reply.VoteGranted = false
+	// 	return
+	// }
+
 	// 如果发现任期号更大，则更新自己的任期号，转换为跟随者，将投票状态清空
+	// 增加限制：
+	// RequestVote RPC 包含关于候选者日志的信息，如果投票者的日志比候选者的日志更新，它将拒绝投票。
+	// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
 	if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
 		rf.votedFor = -1
