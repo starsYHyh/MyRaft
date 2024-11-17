@@ -179,6 +179,7 @@ type AppendEntriesArgs struct {
 	PrevLogTerm  int        // 新日志条目之前的任期
 	Entries      []LogEntry // 要附加的日志条目
 	LeaderCommit int        // 领导者的commitIndex
+	IsHB         bool       // 是否为心跳
 }
 
 type AppendEntriesReply struct {

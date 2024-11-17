@@ -373,7 +373,7 @@ func TestFailNoAgree2B(t *testing.T) {
 	leader2 := cfg.checkOneLeader()
 	index2, _, ok2 := cfg.rafts[leader2].Start(30)
 	if ok2 == false {
-		t.Fatalf("leader2 rejected Start()")
+		t.Fatalf("leader2 %d rejected Start()", leader2)
 	}
 	if index2 < 2 || index2 > 3 {
 		t.Fatalf("unexpected index %v", index2)

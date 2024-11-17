@@ -19,7 +19,10 @@ func (rf *Raft) heartBeat() {
 		Term:         rf.currentTerm,
 		LeaderID:     rf.me,
 		LeaderCommit: rf.commitIndex,
+		PrevLogIndex: rf.recvdIndex,
+		PrevLogTerm:  rf.log[rf.recvdIndex].Term,
 		Entries:      nil,
+		IsHB:         true,
 	}
 	rf.mu.Unlock()
 	reply := AppendEntriesReply{}
@@ -44,38 +47,73 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 如果对方的任期比本服务器的任期新，则更新任期，成为跟随者，并在之后更新日志
 	// 如果对方的任期比本服务器的任期旧，则直接返回false，不更新日志
 	// 如果两边的任期一样，则直接更新日志
-	if args.Term > rf.currentTerm {
-		rf.currentTerm = args.Term
-		rf.votedFor = -1
-		rf.state = Follower
-		rf.persist()
-	} else if args.Term < rf.currentTerm {
-		// Raft 通过比较日志中最后一个条目的索引和任期来确定两个日志中哪个更新。
-		// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
+	// if args.Term > rf.currentTerm {
+	// 	rf.currentTerm = args.Term
+	// 	rf.votedFor = -1
+	// 	rf.state = Follower
+	// 	rf.persist()
+	// } else if args.Term < rf.currentTerm {
+	// 	// Raft 通过比较日志中最后一个条目的索引和任期来确定两个日志中哪个更新。
+	// 	// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
 
-		if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) || (rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
-			// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", me, args.LeaderID, args.Term, rf.currentTerm)
+	// 	if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) || (rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
+	// 		// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", me, args.LeaderID, args.Term, rf.currentTerm)
+	// 		reply.Term = rf.currentTerm
+	// 		reply.Success = false
+	// 		return
+	// 	}
+	// }
+
+	if args.IsHB {
+		if args.Term < rf.currentTerm {
+			DPrintf(dDrop, "F%d reject heartbeat with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
 			reply.Term = rf.currentTerm
 			reply.Success = false
 			return
+		} else if args.Term > rf.currentTerm {
+			rf.currentTerm = args.Term
+			rf.votedFor = -1
+			rf.state = Follower
+			rf.persist()
+		}
+	} else {
+		if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) ||
+			(rf.log[rf.recvdIndex].Term == args.PrevLogTerm &&
+				rf.recvdIndex > args.PrevLogIndex) {
+			DPrintf(dDrop, "F%d reject appendEntries with older log because args.PrevLogIndex is %d and my recvdIndex is %d\n", me, args.PrevLogIndex, rf.recvdIndex)
+			reply.Term = rf.currentTerm
+			reply.Success = false
+			return
+		} else if (rf.log[rf.recvdIndex].Term < args.PrevLogTerm) ||
+			(rf.log[rf.recvdIndex].Term == args.PrevLogTerm &&
+				rf.recvdIndex < args.PrevLogIndex) {
+			DPrintf(dDrop, "F%d receive appendEntries with newer log\n", me)
+			rf.currentTerm = args.Term
+			rf.votedFor = -1
+			rf.state = Follower
+			rf.persist()
+		} else if args.Term < rf.currentTerm {
+			DPrintf(dDrop, "F%d reject appendEntries with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
+			reply.Term = rf.currentTerm
+			reply.Success = false
+			return
+		} else if args.Term > rf.currentTerm {
+			rf.currentTerm = args.Term
+			rf.votedFor = -1
+			rf.state = Follower
+			rf.persist()
 		}
 	}
+
 	rf.updateTime = time.Now()
 	// 心跳
-	if args.Entries == nil {
+	if args.IsHB {
 		// DPrintf(dInfo, "F%d receive heartbeat from L%d\n", me, args.LeaderID)
 		reply.Success = true
 		rf.state = Follower
 	} else {
 		// 非心跳，正常的日志条目
 		// 如果日志在 prevLogIndex 处不匹配，则返回 false
-		// if len(rf.log) != args.PrevLogIndex+1 {
-		// 	DPrintf(dInfo, "F%d MISMATCH  lastIndex is %d but prevlogindex is %d\n", me, len(rf.log), args.PrevLogIndex)
-		// 	reply.Success = false
-		// 	reply.Term = rf.currentTerm
-		// 	return
-		// }
-
 		if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 			DPrintf(dInfo, "F%d MISMATCH  lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
 			reply.Success = false
@@ -87,6 +125,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.log = rf.log[:args.PrevLogIndex+1]
 		rf.log = append(rf.log, args.Entries...)
 		rf.recvdIndex = len(rf.log) - 1
+		// DPrintf(dInfo, "F%d update recvdIndex to %d\n", me, rf.recvdIndex)
 	}
 
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
@@ -158,6 +197,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 						PrevLogIndex: prevLogIndex,
 						PrevLogTerm:  prevLogTerm,
 						LeaderCommit: rf.commitIndex,
+						IsHB:         false,
 					}
 					rf.mu.Unlock()
 					// DPrintf(dInfo, "L%d send entry %v to F%d\n", me, logEntry, server)

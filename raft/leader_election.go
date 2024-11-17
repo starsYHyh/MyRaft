@@ -136,22 +136,20 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if (rf.log[rf.recvdIndex].Term > args.LastLogTerm) ||
 		(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
 			rf.recvdIndex > args.LastLogIndex) {
-		DPrintf(dDrop, "F%d receive appendEntries with older log\n", me)
-		// DPrintf(dDrop, "F%d receive appendEntries with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
+		DPrintf(dDrop, "F%d reject requestVote with older log\n", me)
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
 	} else if (rf.log[rf.recvdIndex].Term < args.LastLogTerm) ||
 		(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
 			rf.recvdIndex < args.LastLogIndex) {
-		DPrintf(dDrop, "F%d receive appendEntries with newer log\n", me)
-		// DPrintf(dDrop, "F%d receive appendEntries with higher term %d and my term is %d\n", me, args.Term, rf.currentTerm)
+		DPrintf(dDrop, "F%d receive requestVote with newer log\n", me)
 		rf.currentTerm = args.Term
 		rf.votedFor = -1
 		rf.state = Follower
 		rf.persist()
 	} else if args.Term < rf.currentTerm {
-		DPrintf(dDrop, "F%d receive appendEntries with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
+		DPrintf(dDrop, "F%d reject requestVote with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
