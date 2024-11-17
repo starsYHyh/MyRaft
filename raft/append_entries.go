@@ -64,6 +64,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 	}
 	// }
 
+	reply.Term = rf.currentTerm
+	reply.Success = false
+
 	if args.IsHB {
 		if args.Term < rf.currentTerm {
 			DPrintf(dDrop, "F%d reject heartbeat with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
@@ -106,6 +109,94 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	rf.updateTime = time.Now()
+	// 心跳
+	if args.IsHB {
+		// DPrintf(dInfo, "F%d receive heartbeat from L%d\n", me, args.LeaderID)
+		reply.Success = true
+		rf.state = Follower
+	} else {
+		// 非心跳，正常的日志条目
+		// 如果日志在 prevLogIndex 处不匹配，则返回 false
+		if rf.recvdIndex < args.PrevLogIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+			DPrintf(dInfo, "F%d MISMATCH\n", me)
+			// DPrintf(dInfo, "F%d MISMATCH  lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
+			reply.Success = false
+			reply.Term = rf.currentTerm
+			return
+		}
+
+		// 如果一个已经存在的条目和新条目在相同的索引位置有相同的任期号和索引值，则复制其后的所有条目
+		rf.log = rf.log[:args.PrevLogIndex+1]
+		rf.log = append(rf.log, args.Entries...)
+		rf.recvdIndex = len(rf.log) - 1
+		// DPrintf(dInfo, "F%d update recvdIndex to %d\n", me, rf.recvdIndex)
+	}
+
+	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
+	if args.LeaderCommit > rf.commitIndex {
+		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
+		DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
+		rf.applyCondSignal()
+	}
+
+	reply.Term = rf.currentTerm
+	reply.Success = true
+
+}
+
+func (rf *Raft) AppendEntriesV2(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	// 解决term冲突
+	me := rf.me
+
+	// 首先判断日志条目
+	// 如果本服务器的日志没有对方的日志新，则直接成为跟随者，并在之后更新日志
+	// 如果本服务器的日志比对方的日志新，则直接返回false，不更新日志
+	// 如果两边的日志一样新，则判断任期
+	// 如果对方的任期比本服务器的任期新，则更新任期，成为跟随者，并在之后更新日志
+	// 如果对方的任期比本服务器的任期旧，则直接返回false，不更新日志
+	// 如果两边的任期一样，则直接更新日志
+	// if args.Term > rf.currentTerm {
+	// 	rf.currentTerm = args.Term
+	// 	rf.votedFor = -1
+	// 	rf.state = Follower
+	// 	rf.persist()
+	// } else if args.Term < rf.currentTerm {
+	// 	// Raft 通过比较日志中最后一个条目的索引和任期来确定两个日志中哪个更新。
+	// 	// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
+
+	// 	if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) || (rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
+	// 		// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", me, args.LeaderID, args.Term, rf.currentTerm)
+	// 		reply.Term = rf.currentTerm
+	// 		reply.Success = false
+	// 		return
+	// 	}
+	// }
+
+	reply.Term = rf.currentTerm
+	reply.Success = false
+
+	if args.Term > rf.currentTerm {
+		rf.currentTerm = args.Term
+		rf.votedFor = -1
+		rf.state = Follower
+		rf.persist()
+		return
+	} else if args.Term < rf.currentTerm {
+		if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) || (rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
+			reply.Term = rf.currentTerm
+			reply.Success = false
+			return
+		}
+	}
+
+	rf.updateTime = time.Now()
+
+	if rf.state == Candidate {
+		rf.state = Follower
+	}
+
 	// 心跳
 	if args.IsHB {
 		// DPrintf(dInfo, "F%d receive heartbeat from L%d\n", me, args.LeaderID)
@@ -222,8 +313,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 							commitCh <- reply.Success
 							return
 						} else { // 如果失败，则递减nextIndex，并不断重试
-							DPrintf(dWarn, "L%d retry to send entry to F%d\n", me, server)
 							rf.nextIndex[server]--
+							DPrintf(dWarn, "L%d retry to send entry to F%d and start from %d\n", me, server, rf.nextIndex[server])
 						}
 					} else {
 						commitCh <- false

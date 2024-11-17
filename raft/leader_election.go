@@ -126,6 +126,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	defer rf.mu.Unlock()
 
 	me := rf.me
+	reply.Term = rf.currentTerm
+	reply.VoteGranted = false
 	// 首先判断日志条目
 	// 如果本服务器的日志没有对方的日志新，则直接成为跟随者
 	// 如果本服务器的日志比对方的日志新，则直接返回false，
@@ -137,8 +139,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
 			rf.recvdIndex > args.LastLogIndex) {
 		DPrintf(dDrop, "F%d reject requestVote with older log\n", me)
-		reply.Term = rf.currentTerm
-		reply.VoteGranted = false
 		return
 	} else if (rf.log[rf.recvdIndex].Term < args.LastLogTerm) ||
 		(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
@@ -150,8 +150,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.persist()
 	} else if args.Term < rf.currentTerm {
 		DPrintf(dDrop, "F%d reject requestVote with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
-		reply.Term = rf.currentTerm
-		reply.VoteGranted = false
 		return
 	} else if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
@@ -160,11 +158,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.persist()
 	}
 
+	reply.Term = rf.currentTerm
 	if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
 		rf.currentTerm = args.Term
-		reply.Term = rf.currentTerm
 		rf.updateTime = time.Now()
 		DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
