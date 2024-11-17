@@ -9,17 +9,18 @@ import (
 func (rf *Raft) leaderElection() {
 	// 初始化参数
 	rf.mu.Lock()
+	me := rf.me
 	rf.currentTerm++
-	rf.votedFor = rf.me  // 为自己投票
+	rf.votedFor = me     // 为自己投票
 	rf.state = Candidate // 转换为候选者
 	rf.resetTime()       // 重置选举时间、更新时间
 	args := RequestVoteArgs{
 		Term:         rf.currentTerm, // 当前任期
-		CandidateID:  rf.me,
+		CandidateID:  me,
 		LastLogIndex: len(rf.log) - 1,
 		LastLogTerm:  rf.log[len(rf.log)-1].Term,
 	}
-	DPrintf(dVote, "C%d start election, term is %d", rf.me, rf.currentTerm)
+	DPrintf(dVote, "C%d start election, term is %d", me, rf.currentTerm)
 	rf.mu.Unlock()
 
 	// 需并行向其他服务器发送投票请求，要保证在收到半数以上的选票或者选举超时后立即退出
@@ -30,7 +31,7 @@ func (rf *Raft) leaderElection() {
 	// 创建一个定时器，用于选举超时
 	timeout := time.After(rf.electionTimeout)
 	for i := range rf.peers {
-		if i != rf.me {
+		if i != me {
 			wg.Add(1)
 			// 向其他服务器发送投票请求
 			go func(server int) {
@@ -75,26 +76,27 @@ func (rf *Raft) leaderElection() {
 
 					rf.mu.Lock()
 					rf.state = Leader
-					rf.nextIndex = make([]int, len(rf.peers))
 					for i := range rf.nextIndex {
 						rf.nextIndex[i] = len(rf.log)
+						rf.matchIndex[i] = 0
 					}
+
 					rf.recvdIndex = len(rf.log) - 1
 					rf.mu.Unlock()
 
-					DPrintf(dLeader, "C%d become leader\n", rf.me)
+					DPrintf(dLeader, "C%d become leader\n", me)
 					rf.heartBeat()
 					// 如果检测到自己成为了领导者，则立即退出选举
 					return
 				}
 			case <-timeout:
 				// 如果定时器超时，则选举失败
-				DPrintf(dTimer, "C%d election timeout\n", rf.me)
+				DPrintf(dTimer, "C%d election timeout\n", me)
 				return
 			}
 		} else {
 			// 如果检测到在选举过程中由候选者变成了跟随者，例如任期原因，则立即退出选举
-			DPrintf(dVote, "C%d become follower\n", rf.me)
+			DPrintf(dVote, "C%d become follower\n", me)
 			return
 		}
 	}

@@ -86,7 +86,7 @@ type Raft struct {
 
 	// 领导者服务器上的易失状态（选举后重新初始化）
 
-	recvdIndex    int           // 已知收到的最后一个日志条目的索引，即为日志长度，（初始化为 0，单调增加）
+	recvdIndex    int           // 已知收到的最后一个日志条目的索引，即为日志长度-1，（初始化为 0，单调增加）
 	nextIndex     []int         // 对于每个服务器，发送到该服务器的下一个日志条目的索引（初始化为领导者最后一个日志索引 + 1）
 	matchIndex    []int         // 对于每个服务器，已知在服务器上复制的最高日志条目的索引（初始化为 0，单调增加）
 	heartBeatTime time.Duration // 心跳时间
@@ -245,6 +245,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.log = make([]LogEntry, 1) // 索引从1开始
 	rf.log[0] = LogEntry{0, nil} // 第0个日志条目为空
 	rf.commitIndex = 0           // 已知已提交的最高日志条目的索引
+
+	rf.nextIndex = make([]int, len(rf.peers))
+	rf.matchIndex = make([]int, len(rf.peers))
 
 	rf.applyCh = applyCh
 	rf.applyCond = sync.NewCond(&rf.mu)
