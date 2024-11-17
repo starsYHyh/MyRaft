@@ -44,11 +44,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 如果对方的任期比本服务器的任期新，则更新任期，成为跟随者，并在之后更新日志
 	// 如果对方的任期比本服务器的任期旧，则直接返回false，不更新日志
 	// 如果两边的任期一样，则直接更新日志
-	// if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) ||
-	// 	(rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
-
-	// }
-
 	if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
 		rf.votedFor = -1
@@ -74,12 +69,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	} else {
 		// 非心跳，正常的日志条目
 		// 如果日志在 prevLogIndex 处不匹配，则返回 false
-		if len(rf.log) != args.PrevLogIndex+1 {
-			DPrintf(dInfo, "F%d MISMATCH  lastIndex is %d but prevlogindex is %d\n", me, len(rf.log), args.PrevLogIndex)
-			reply.Success = false
-			reply.Term = rf.currentTerm
-			return
-		}
+		// if len(rf.log) != args.PrevLogIndex+1 {
+		// 	DPrintf(dInfo, "F%d MISMATCH  lastIndex is %d but prevlogindex is %d\n", me, len(rf.log), args.PrevLogIndex)
+		// 	reply.Success = false
+		// 	reply.Term = rf.currentTerm
+		// 	return
+		// }
 
 		if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 			DPrintf(dInfo, "F%d MISMATCH  lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)

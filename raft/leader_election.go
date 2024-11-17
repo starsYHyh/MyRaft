@@ -124,24 +124,38 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	*/
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	if args.Term < rf.currentTerm {
-		reply.VoteGranted = false
+
+	me := rf.me
+	// 首先判断日志条目
+	// 如果本服务器的日志没有对方的日志新，则直接成为跟随者
+	// 如果本服务器的日志比对方的日志新，则直接返回false，
+	// 如果两边的日志一样新，则判断任期
+	// 如果对方的任期比本服务器的任期新，则更新任期，成为跟随者
+	// 如果对方的任期比本服务器的任期旧，则直接返回false
+	// 如果两边的任期一样，则直接更新日志
+	if (rf.log[rf.recvdIndex].Term > args.LastLogTerm) ||
+		(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
+			rf.recvdIndex > args.LastLogIndex) {
+		DPrintf(dDrop, "F%d receive appendEntries with older log\n", me)
+		// DPrintf(dDrop, "F%d receive appendEntries with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
 		reply.Term = rf.currentTerm
+		reply.VoteGranted = false
 		return
-	}
-
-	// if (rf.log[rf.recvdIndex].Term > args.LastLogTerm) || (rf.log[rf.recvdIndex].Term == args.LastLogTerm && rf.recvdIndex > args.LastLogIndex) {
-	// 	// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", me, args.LeaderID, args.Term, rf.currentTerm)
-	// 	reply.Term = rf.currentTerm
-	// 	reply.VoteGranted = false
-	// 	return
-	// }
-
-	// 如果发现任期号更大，则更新自己的任期号，转换为跟随者，将投票状态清空
-	// 增加限制：
-	// RequestVote RPC 包含关于候选者日志的信息，如果投票者的日志比候选者的日志更新，它将拒绝投票。
-	// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
-	if args.Term > rf.currentTerm {
+	} else if (rf.log[rf.recvdIndex].Term < args.LastLogTerm) ||
+		(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
+			rf.recvdIndex < args.LastLogIndex) {
+		DPrintf(dDrop, "F%d receive appendEntries with newer log\n", me)
+		// DPrintf(dDrop, "F%d receive appendEntries with higher term %d and my term is %d\n", me, args.Term, rf.currentTerm)
+		rf.currentTerm = args.Term
+		rf.votedFor = -1
+		rf.state = Follower
+		rf.persist()
+	} else if args.Term < rf.currentTerm {
+		DPrintf(dDrop, "F%d receive appendEntries with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
+		reply.Term = rf.currentTerm
+		reply.VoteGranted = false
+		return
+	} else if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
 		rf.votedFor = -1
 		rf.state = Follower
@@ -154,7 +168,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.currentTerm = args.Term
 		reply.Term = rf.currentTerm
 		rf.updateTime = time.Now()
-		// DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
+		DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
 	}
 }
