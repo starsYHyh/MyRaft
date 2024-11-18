@@ -84,6 +84,7 @@ func (rf *Raft) leaderElection() {
 					rf.mu.Unlock()
 
 					DPrintf(dLeader, "C%d become leader\n", me)
+					// 成为领导者后，立即发送心跳
 					rf.heartBeat()
 					// 如果检测到自己成为了领导者，则立即退出选举
 					return
@@ -180,7 +181,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if args.Term > rf.currentTerm {
 		rf.setNewTerm(args.Term)
 	}
-	DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
+	// DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
 
 	if (rf.votedFor == -1 || rf.votedFor == args.CandidateID) &&
 		(args.LastLogTerm > rf.log[rf.recvdIndex].Term ||

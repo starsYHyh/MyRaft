@@ -5,31 +5,6 @@ import (
 	"time"
 )
 
-// 向单个服务器发送附加日志条目
-func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
-	// Your code here (2A, 2B).
-	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-	return ok
-}
-
-// 向所有服务器发送心跳
-func (rf *Raft) heartBeat() {
-	rf.mu.Lock()
-	args := AppendEntriesArgs{
-		Term:         rf.currentTerm,
-		LeaderID:     rf.me,
-		LeaderCommit: rf.commitIndex,
-		Entries:      nil,
-	}
-	rf.mu.Unlock()
-	reply := AppendEntriesReply{}
-	for i := range rf.peers {
-		if i != rf.me {
-			go rf.sendAppendEntries(i, &args, &reply)
-		}
-	}
-}
-
 // 处理附加日志条目的RPC请求
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
@@ -66,43 +41,30 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		(rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex+len(args.Entries)) {
 		reply.Term = rf.currentTerm
 		reply.Success = false
+		DPrintf(dDrop, "F%d refuse appendEntries from L%d\n", me, args.LeaderID)
 		return
 	}
 	rf.setNewTerm(args.Term)
+	DPrintf(dInfo, "F%d become follower\n", me)
 
-	// 心跳
-	if args.Entries == nil {
-		// DPrintf(dInfo, "F%d receive heartbeat from L%d\n", me, args.LeaderID)
-		reply.Success = true
-		rf.state = Follower
-	} else {
-		// 非心跳，正常的日志条目
-		// 如果日志在 prevLogIndex 处不匹配，则返回 false
-		// if len(rf.log) != args.PrevLogIndex+1 {
-		// 	DPrintf(dInfo, "F%d MISMATCH  lastIndex is %d but prevlogindex is %d\n", me, len(rf.log), args.PrevLogIndex)
-		// 	reply.Success = false
-		// 	reply.Term = rf.currentTerm
-		// 	return
-		// }
-
-		if args.PrevLogIndex > rf.recvdIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
-			if args.PrevLogIndex <= rf.recvdIndex {
-				DPrintf(dInfo, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
-			} else {
-				DPrintf(dInfo, "F%d MISMATCH lastIndex is %d but prevlogindex is %d\n", me, rf.recvdIndex, args.PrevLogIndex)
-			}
-
-			reply.Success = false
-			reply.Term = rf.currentTerm
-			return
+	// 如果日志在 prevLogIndex 处不匹配，则返回 false
+	if args.PrevLogIndex > rf.recvdIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+		if args.PrevLogIndex <= rf.recvdIndex {
+			DPrintf(dInfo, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
+		} else {
+			DPrintf(dInfo, "F%d MISMATCH lastIndex is %d but prevlogindex is %d\n", me, rf.recvdIndex, args.PrevLogIndex)
 		}
 
-		// 如果一个已经存在的条目和新条目在相同的索引位置有相同的任期号和索引值，则复制其后的所有条目
-		rf.log = rf.log[:args.PrevLogIndex+1]
-		rf.log = append(rf.log, args.Entries...)
-		DPrintf(dInfo, "F%d update entry to %v [%d]\n", me, rf.log, rf.currentTerm)
-		rf.recvdIndex = len(rf.log) - 1
+		reply.Success = false
+		reply.Term = rf.currentTerm
+		return
 	}
+
+	// 如果一个已经存在的条目和新条目在相同的索引位置有相同的任期号和索引值，则复制其后的所有条目
+	rf.log = rf.log[:args.PrevLogIndex+1]
+	rf.log = append(rf.log, args.Entries...)
+	// DPrintf(dInfo, "F%d update entry to %v [%d]\n", me, rf.log, rf.currentTerm)
+	rf.recvdIndex = len(rf.log) - 1
 
 	rf.updateTime = time.Now()
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
@@ -115,7 +77,32 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	reply.Term = rf.currentTerm
 	reply.Success = true
+	// DPrintf(dInfo, "F%d is called by L%d\n", me, args.LeaderID)
+}
 
+// 向单个服务器发送附加日志条目
+func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	// Your code here (2A, 2B).
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+	return ok
+}
+
+// 向所有服务器发送心跳，心跳需要包含其他服务器所缺少的日志，否则每次只能等到下次客户端请求时才能发送日志
+func (rf *Raft) heartBeatv() {
+	rf.mu.Lock()
+	args := AppendEntriesArgs{
+		Term:         rf.currentTerm,
+		LeaderID:     rf.me,
+		LeaderCommit: rf.commitIndex,
+		Entries:      nil,
+	}
+	rf.mu.Unlock()
+	reply := AppendEntriesReply{}
+	for i := range rf.peers {
+		if i != rf.me {
+			go rf.sendAppendEntries(i, &args, &reply)
+		}
+	}
 }
 
 // 使用Raft的服务（例如k/v服务器）希望开始对要附加到Raft日志的下一个命令达成一致。
@@ -126,7 +113,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // 第一个返回值是命令将出现的索引（如果它被提交的话）。
 // 第二个返回值是当前任期。
 // 第三个返回值是如果此服务器认为自己是领导者，则为true。
-func (rf *Raft) Start(command interface{}) (int, int, bool) {
+func (rf *Raft) StartV2(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
 	// 如果此服务器不是领导者，则返回false
 	me := rf.me
@@ -206,6 +193,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 							rf.nextIndex[server]--
 						}
 					} else {
+						DPrintf(dInfo, "L%d F%d refused because of network, try to resend heart is %d\n", rf.me, server, len(logEntry) == 0)
 						commitCh <- false
 					}
 				}
