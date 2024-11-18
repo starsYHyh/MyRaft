@@ -44,23 +44,32 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 如果对方的任期比本服务器的任期新，则更新任期，成为跟随者，并在之后更新日志
 	// 如果对方的任期比本服务器的任期旧，则直接返回false，不更新日志
 	// 如果两边的任期一样，则直接更新日志
-	if args.Term > rf.currentTerm {
-		rf.currentTerm = args.Term
-		rf.votedFor = -1
-		rf.state = Follower
-		rf.persist()
-	} else if args.Term < rf.currentTerm {
-		// Raft 通过比较日志中最后一个条目的索引和任期来确定两个日志中哪个更新。
-		// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
+	// if args.Term > rf.currentTerm {
+	// 	rf.currentTerm = args.Term
+	// 	rf.votedFor = -1
+	// 	rf.state = Follower
+	// 	rf.persist()
+	// } else if args.Term < rf.currentTerm {
+	// 	// Raft 通过比较日志中最后一个条目的索引和任期来确定两个日志中哪个更新。
+	// 	// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
 
-		if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) || (rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
-			// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", me, args.LeaderID, args.Term, rf.currentTerm)
-			reply.Term = rf.currentTerm
-			reply.Success = false
-			return
-		}
+	// 	if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) || (rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
+	// 		// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", me, args.LeaderID, args.Term, rf.currentTerm)
+	// 		reply.Term = rf.currentTerm
+	// 		reply.Success = false
+	// 		return
+	// 	}
+	// }
+
+	if args.Term < rf.currentTerm &&
+		(rf.log[rf.recvdIndex].Term > args.PrevLogTerm) ||
+		(rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex+len(args.Entries)) {
+		reply.Term = rf.currentTerm
+		reply.Success = false
+		return
 	}
-	rf.updateTime = time.Now()
+	rf.setNewTerm(args.Term)
+
 	// 心跳
 	if args.Entries == nil {
 		// DPrintf(dInfo, "F%d receive heartbeat from L%d\n", me, args.LeaderID)
@@ -76,8 +85,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		// 	return
 		// }
 
-		if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
-			DPrintf(dInfo, "F%d MISMATCH  lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
+		if args.PrevLogIndex > rf.recvdIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+			if args.PrevLogIndex <= rf.recvdIndex {
+				DPrintf(dInfo, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
+			} else {
+				DPrintf(dInfo, "F%d MISMATCH lastIndex is %d but prevlogindex is %d\n", me, rf.recvdIndex, args.PrevLogIndex)
+			}
+
 			reply.Success = false
 			reply.Term = rf.currentTerm
 			return
@@ -86,13 +100,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		// 如果一个已经存在的条目和新条目在相同的索引位置有相同的任期号和索引值，则复制其后的所有条目
 		rf.log = rf.log[:args.PrevLogIndex+1]
 		rf.log = append(rf.log, args.Entries...)
+		DPrintf(dInfo, "F%d update entry to %v [%d]\n", me, rf.log, rf.currentTerm)
 		rf.recvdIndex = len(rf.log) - 1
 	}
 
+	rf.updateTime = time.Now()
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
-		DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
+		// DPrintf(dCommit, "F%d update commitIndex to  %d [%d]\n", me, rf.commitIndex, rf.currentTerm)
+		DPrintf(dCommit, "F%d update commitIndex to min(%d, %d)\n", me, args.LeaderCommit, len(rf.log)-1)
 		rf.applyCondSignal()
 	}
 
@@ -114,7 +131,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	// 如果此服务器不是领导者，则返回false
 	me := rf.me
 	if rf.state != Leader {
-		// DPrintf(dDrop, "F%d is not leader and cannot receive command %v\n", me, command)
 		rf.mu.Unlock()
 		return 0, 0, false
 	}
@@ -123,6 +139,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 	// 将新的日志添加到日志中
 	currentTerm, _ := rf.GetState()
+	DPrintf(dInfo, "L%d nextIndex is %v\n", me, rf.nextIndex)
 	rf.log = append(rf.log, LogEntry{Term: currentTerm, Command: command})
 	rf.recvdIndex++
 	recvdIndex := rf.recvdIndex
@@ -136,14 +153,13 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	commitCh := make(chan bool, len(rf.peers)-1)
 	timeout := time.After(rf.electionTimeout)
 
-	DPrintf(dInfo, "L%d nextIndex is %v\n", me, rf.nextIndex)
 	for i := range rf.peers {
 		if i != me {
 			wg.Add(1)
 			go func(server int) {
 				defer wg.Done()
 				for {
-					if rf.state != Leader {
+					if rf.state != Leader || rf.recvdIndex < rf.nextIndex[server] {
 						return
 					}
 
@@ -151,6 +167,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 					prevLogIndex := rf.nextIndex[server] - 1
 					prevLogTerm := rf.log[prevLogIndex].Term
 					logEntry := rf.log[prevLogIndex+1:]
+					lastLogIndex := len(rf.log) - 1
 					args := AppendEntriesArgs{
 						Term:         currentTerm,
 						LeaderID:     me,
@@ -159,24 +176,27 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 						PrevLogTerm:  prevLogTerm,
 						LeaderCommit: rf.commitIndex,
 					}
+					DPrintf(dInfo, "L%d send entry %v and commitIndex %d and prevLogIndex %d to F%d\n",
+						me, logEntry, rf.commitIndex, prevLogIndex, server)
 					rf.mu.Unlock()
-					// DPrintf(dInfo, "L%d send entry %v to F%d\n", me, logEntry, server)
 					reply := AppendEntriesReply{}
 					if rf.sendAppendEntries(server, &args, &reply) {
 						// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
 						// 对应着论文中图二的rules for all servers
 						rf.mu.Lock()
 						if reply.Term > currentTerm {
-							rf.currentTerm = reply.Term
-							rf.votedFor = -1
-							rf.state = Follower
-							rf.persist()
+							rf.setNewTerm(reply.Term)
+							rf.updateTime = time.Now()
+							commitCh <- false
+							rf.mu.Unlock()
+							return
 						}
 						rf.mu.Unlock()
 						if reply.Success { // 如果成功，则更新nextIndex
 							rf.mu.Lock()
-							rf.nextIndex[server] = recvdIndex + 1
-							rf.matchIndex[server] = recvdIndex
+							rf.nextIndex[server] = lastLogIndex + 1
+							rf.matchIndex[server] = lastLogIndex
+							DPrintf(dInfo, "F%d update nextIndex to %d\n", server, rf.nextIndex[server])
 							rf.mu.Unlock()
 							// 如果收到复制结果，则将结果发送到commitCh中
 							commitCh <- reply.Success
@@ -188,7 +208,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 					} else {
 						commitCh <- false
 					}
-
 				}
 			}(i)
 		}
