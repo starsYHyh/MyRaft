@@ -124,6 +124,7 @@ func TestManyElections2A(t *testing.T) {
 		cfg.disconnect(i1)
 		cfg.disconnect(i2)
 		cfg.disconnect(i3)
+		DPrintf(dLog, "S%d, S%d, S%d disconnected", i1, i2, i3)
 
 		// either the current leader should still be alive,
 		// or the remaining four should elect a new one.
@@ -132,6 +133,7 @@ func TestManyElections2A(t *testing.T) {
 		cfg.connect(i1)
 		cfg.connect(i2)
 		cfg.connect(i3)
+		DPrintf(dLog2, "S%d, S%d, S%d reconnected", i1, i2, i3)
 	}
 
 	cfg.checkOneLeader()
@@ -375,9 +377,12 @@ func TestFailNoAgree2B(t *testing.T) {
 	if ok2 == false {
 		t.Fatalf("leader2 %d rejected Start()", leader2)
 	}
+	// 说明index2=2，说明之前的index2=2的命令已经提交了
+	// 如果index2=3，说明之前的index2=2的命令没有提交
 	if index2 < 2 || index2 > 3 {
 		t.Fatalf("unexpected index %v", index2)
 	}
+	DPrintf(dLog, "L%d index2=%v\n", leader2, index2)
 
 	cfg.one(1000, servers, true)
 
@@ -389,6 +394,7 @@ func TestConcurrentStarts2B(t *testing.T) {
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
+	DPrintf(dTest, "Test ConcurrentStarts: concurrent Start()s")
 	cfg.begin("Test (2B): concurrent Start()s")
 
 	var success bool
@@ -490,6 +496,7 @@ func TestRejoin2B(t *testing.T) {
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
+	DPrintf(dTest, "Test Rejoin: rejoin of partitioned leader")
 	cfg.begin("Test (2B): rejoin of partitioned leader")
 
 	cfg.one(101, servers, true)
@@ -497,6 +504,7 @@ func TestRejoin2B(t *testing.T) {
 	// leader network failure
 	leader1 := cfg.checkOneLeader()
 	cfg.disconnect(leader1)
+	DPrintf(dLog, "L%d disconnected", leader1)
 
 	// make old leader try to agree on some entries
 	cfg.rafts[leader1].Start(102)
@@ -509,14 +517,17 @@ func TestRejoin2B(t *testing.T) {
 	// new leader network failure
 	leader2 := cfg.checkOneLeader()
 	cfg.disconnect(leader2)
+	DPrintf(dLog, "L%d disconnected", leader2)
 
 	// old leader connected again
 	cfg.connect(leader1)
+	DPrintf(dLog2, "L%d reconnected", leader1)
 
 	cfg.one(104, 2, true)
 
 	// all together now
 	cfg.connect(leader2)
+	DPrintf(dLog2, "L%d reconnected", leader2)
 
 	cfg.one(105, servers, true)
 

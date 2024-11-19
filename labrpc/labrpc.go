@@ -120,6 +120,7 @@ func (e *ClientEnd) Call(svcMeth string, args interface{}, reply interface{}) bo
 		}
 		return true
 	} else {
+		log.Printf("ClientEnd.Call(): server failed to reply\n")
 		return false
 	}
 }

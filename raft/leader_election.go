@@ -42,10 +42,9 @@ func (rf *Raft) leaderElection() {
 					// 对应着论文中图二的rules for all servers
 					rf.mu.Lock()
 					if reply.Term > rf.currentTerm {
-						rf.currentTerm = reply.Term
-						rf.votedFor = -1
-						rf.state = Follower
-						rf.persist()
+						rf.setNewTerm(reply.Term)
+						rf.updateTime = time.Now()
+						return
 					}
 					rf.mu.Unlock()
 					// 如果收到投票结果，则将结果发送到voteCh中
@@ -85,6 +84,7 @@ func (rf *Raft) leaderElection() {
 					rf.mu.Unlock()
 
 					DPrintf(dLeader, "C%d become leader\n", me)
+					// 成为领导者后，立即发送心跳
 					rf.heartBeat()
 					// 如果检测到自己成为了领导者，则立即退出选举
 					return
@@ -96,7 +96,7 @@ func (rf *Raft) leaderElection() {
 			}
 		} else {
 			// 如果检测到在选举过程中由候选者变成了跟随者，例如任期原因，则立即退出选举
-			DPrintf(dVote, "C%d become follower\n", me)
+			// DPrintf(dVote, "C%d become follower\n", me)
 			return
 		}
 	}
@@ -125,9 +125,13 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+<<<<<<< HEAD
 	me := rf.me
 	reply.Term = rf.currentTerm
 	reply.VoteGranted = false
+=======
+	// me := rf.me
+>>>>>>> 6c0de578d3c176aac0594b415cafe26d4584b629
 	// 首先判断日志条目
 	// 如果本服务器的日志没有对方的日志新，则直接成为跟随者
 	// 如果本服务器的日志比对方的日志新，则直接返回false，
@@ -135,6 +139,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// 如果对方的任期比本服务器的任期新，则更新任期，成为跟随者
 	// 如果对方的任期比本服务器的任期旧，则直接返回false
 	// 如果两边的任期一样，则直接更新日志
+<<<<<<< HEAD
 	if (rf.log[rf.recvdIndex].Term > args.LastLogTerm) ||
 		(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
 			rf.recvdIndex > args.LastLogIndex) {
@@ -163,8 +168,68 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
 		rf.currentTerm = args.Term
+=======
+	// if (rf.log[rf.recvdIndex].Term > args.LastLogTerm) ||
+	// 	(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
+	// 		rf.recvdIndex > args.LastLogIndex) {
+	// 	DPrintf(dDrop, "F%d receive appendEntries with older log\n", me)
+	// 	// DPrintf(dDrop, "F%d receive appendEntries with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
+	// 	reply.Term = rf.currentTerm
+	// 	reply.VoteGranted = false
+	// 	return
+	// } else if (rf.log[rf.recvdIndex].Term < args.LastLogTerm) ||
+	// 	(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
+	// 		rf.recvdIndex < args.LastLogIndex) {
+	// 	DPrintf(dDrop, "F%d receive appendEntries with newer log\n", me)
+	// 	// DPrintf(dDrop, "F%d receive appendEntries with higher term %d and my term is %d\n", me, args.Term, rf.currentTerm)
+	// 	rf.currentTerm = args.Term
+	// 	rf.votedFor = -1
+	// 	rf.state = Follower
+	// 	rf.persist()
+	// } else if args.Term < rf.currentTerm {
+	// 	DPrintf(dDrop, "F%d receive appendEntries with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
+	// 	reply.Term = rf.currentTerm
+	// 	reply.VoteGranted = false
+	// 	return
+	// } else if args.Term > rf.currentTerm {
+	// 	rf.currentTerm = args.Term
+	// 	rf.votedFor = -1
+	// 	rf.state = Follower
+	// 	rf.persist()
+	// }
+
+	// if args.Term < rf.currentTerm &&
+	// 	(rf.log[rf.recvdIndex].Term > args.LastLogTerm) ||
+	// 	(rf.log[rf.recvdIndex].Term == args.LastLogTerm && rf.recvdIndex > args.LastLogIndex) {
+	// 	reply.Term = rf.currentTerm
+	// 	reply.VoteGranted = false
+	// 	return
+	// } else {
+	// 	rf.setNewTerm(args.Term)
+	// }
+
+	if args.Term < rf.currentTerm {
+		reply.Term = rf.currentTerm
+		reply.VoteGranted = false
+		return
+	}
+
+	if args.Term > rf.currentTerm {
+		rf.setNewTerm(args.Term)
+	}
+	// DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
+
+	if (rf.votedFor == -1 || rf.votedFor == args.CandidateID) &&
+		(args.LastLogTerm > rf.log[rf.recvdIndex].Term ||
+			(args.LastLogTerm == rf.log[rf.recvdIndex].Term && args.LastLogIndex >= rf.recvdIndex)) {
+		reply.VoteGranted = true
+		rf.votedFor = args.CandidateID
+>>>>>>> 6c0de578d3c176aac0594b415cafe26d4584b629
 		rf.updateTime = time.Now()
 		DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
+	} else {
+		reply.VoteGranted = false
 	}
+	reply.Term = rf.currentTerm
 }

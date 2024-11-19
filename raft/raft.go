@@ -202,6 +202,13 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
+func (rf *Raft) setNewTerm(term int) {
+	rf.currentTerm = term
+	rf.votedFor = -1
+	rf.state = Follower
+	rf.persist()
+}
+
 // ticker goroutine在此对等方最近没有收到心跳时启动新选举。
 // 在ticker中，需要处理两件事
 // 1. 如果最近选举超时时间内没有收到心跳，则启动新选举
