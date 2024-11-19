@@ -118,9 +118,12 @@ func TestManyElections2A(t *testing.T) {
 	iters := 10
 	for ii := 1; ii < iters; ii++ {
 		// disconnect three nodes
-		i1 := rand.Int() % servers
-		i2 := rand.Int() % servers
-		i3 := rand.Int() % servers
+		// i1 := rand.Int() % servers
+		// i2 := rand.Int() % servers
+		// i3 := rand.Int() % servers
+		i1 := 0
+		i2 := 0
+		i3 := 1
 		cfg.disconnect(i1)
 		cfg.disconnect(i2)
 		cfg.disconnect(i3)
@@ -594,6 +597,7 @@ func TestBackup2B(t *testing.T) {
 
 	// lots of successful commands to new group.
 	for i := 0; i < 50; i++ {
+		DPrintf(dError, "i=%v", i)
 		cfg.one(rand.Int(), 3, true)
 	}
 

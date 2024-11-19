@@ -11,42 +11,26 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	defer rf.mu.Unlock()
 	// 解决term冲突
 	me := rf.me
-
-	// 首先判断日志条目
-	// 如果本服务器的日志没有对方的日志新，则直接成为跟随者，并在之后更新日志
-	// 如果本服务器的日志比对方的日志新，则直接返回false，不更新日志
-	// 如果两边的日志一样新，则判断任期
-	// 如果对方的任期比本服务器的任期新，则更新任期，成为跟随者，并在之后更新日志
-	// 如果对方的任期比本服务器的任期旧，则直接返回false，不更新日志
-	// 如果两边的任期一样，则直接更新日志
-	// if args.Term > rf.currentTerm {
-	// 	rf.currentTerm = args.Term
-	// 	rf.votedFor = -1
-	// 	rf.state = Follower
-	// 	rf.persist()
-	// } else if args.Term < rf.currentTerm {
-	// 	// Raft 通过比较日志中最后一个条目的索引和任期来确定两个日志中哪个更新。
-	// 	// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
-
-	// 	if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) || (rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
-	// 		// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", me, args.LeaderID, args.Term, rf.currentTerm)
-	// 		reply.Term = rf.currentTerm
-	// 		reply.Success = false
-	// 		return
-	// 	}
-	// }
-
-	if args.Term < rf.currentTerm &&
-		(rf.log[rf.recvdIndex].Term > args.PrevLogTerm) ||
-		(rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex+len(args.Entries)) {
-		reply.Term = rf.currentTerm
-		reply.Success = false
-		DPrintf(dDrop, "F%d refuse appendEntries from L%d\n", me, args.LeaderID)
+	reply.Success = false
+	reply.Conflict = false
+	if args.Term > rf.currentTerm {
+		rf.setNewTerm(args.Term)
+		DPrintf(dInfo, "F%d become follower\n", me)
+		reply.Term = args.Term
 		return
 	}
-	rf.setNewTerm(args.Term)
-	DPrintf(dInfo, "F%d become follower\n", me)
 
+	// append entries rpc 1
+	if args.Term < rf.currentTerm {
+		reply.Term = rf.currentTerm
+		return
+	}
+
+	if rf.state == Candidate {
+		rf.state = Follower
+	}
+
+	rf.updateTime = time.Now()
 	// 如果日志在 prevLogIndex 处不匹配，则返回 false
 	if args.PrevLogIndex > rf.recvdIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 		if args.PrevLogIndex <= rf.recvdIndex {
@@ -55,7 +39,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			DPrintf(dInfo, "F%d MISMATCH lastIndex is %d but prevlogindex is %d\n", me, rf.recvdIndex, args.PrevLogIndex)
 		}
 
-		reply.Success = false
+		reply.Conflict = true // 说明日志不匹配
 		reply.Term = rf.currentTerm
 		return
 	}
@@ -66,7 +50,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// DPrintf(dInfo, "F%d update entry to %v [%d]\n", me, rf.log, rf.currentTerm)
 	rf.recvdIndex = len(rf.log) - 1
 
-	rf.updateTime = time.Now()
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
@@ -77,6 +60,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	reply.Term = rf.currentTerm
 	reply.Success = true
+	reply.Conflict = false
 	// DPrintf(dInfo, "F%d is called by L%d\n", me, args.LeaderID)
 }
 
@@ -108,207 +92,6 @@ func (rf *Raft) heartBeatv() {
 	}
 }
 
-<<<<<<< HEAD
-// 处理附加日志条目的RPC请求
-func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	// 解决term冲突
-	me := rf.me
-
-	// 首先判断日志条目
-	// 如果本服务器的日志没有对方的日志新，则直接成为跟随者，并在之后更新日志
-	// 如果本服务器的日志比对方的日志新，则直接返回false，不更新日志
-	// 如果两边的日志一样新，则判断任期
-	// 如果对方的任期比本服务器的任期新，则更新任期，成为跟随者，并在之后更新日志
-	// 如果对方的任期比本服务器的任期旧，则直接返回false，不更新日志
-	// 如果两边的任期一样，则直接更新日志
-	// if args.Term > rf.currentTerm {
-	// 	rf.currentTerm = args.Term
-	// 	rf.votedFor = -1
-	// 	rf.state = Follower
-	// 	rf.persist()
-	// } else if args.Term < rf.currentTerm {
-	// 	// Raft 通过比较日志中最后一个条目的索引和任期来确定两个日志中哪个更新。
-	// 	// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
-
-	// 	if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) || (rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
-	// 		// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", me, args.LeaderID, args.Term, rf.currentTerm)
-	// 		reply.Term = rf.currentTerm
-	// 		reply.Success = false
-	// 		return
-	// 	}
-	// }
-
-	reply.Term = rf.currentTerm
-	reply.Success = false
-
-	if args.IsHB {
-		if args.Term < rf.currentTerm {
-			DPrintf(dDrop, "F%d reject heartbeat with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
-			reply.Term = rf.currentTerm
-			reply.Success = false
-			return
-		} else if args.Term > rf.currentTerm {
-			rf.currentTerm = args.Term
-			rf.votedFor = -1
-			rf.state = Follower
-			rf.persist()
-		}
-	} else {
-		if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) ||
-			(rf.log[rf.recvdIndex].Term == args.PrevLogTerm &&
-				rf.recvdIndex > args.PrevLogIndex) {
-			DPrintf(dDrop, "F%d reject appendEntries with older log because args.PrevLogIndex is %d and my recvdIndex is %d\n", me, args.PrevLogIndex, rf.recvdIndex)
-			reply.Term = rf.currentTerm
-			reply.Success = false
-			return
-		} else if (rf.log[rf.recvdIndex].Term < args.PrevLogTerm) ||
-			(rf.log[rf.recvdIndex].Term == args.PrevLogTerm &&
-				rf.recvdIndex < args.PrevLogIndex) {
-			DPrintf(dDrop, "F%d receive appendEntries with newer log\n", me)
-			rf.currentTerm = args.Term
-			rf.votedFor = -1
-			rf.state = Follower
-			rf.persist()
-		} else if args.Term < rf.currentTerm {
-			DPrintf(dDrop, "F%d reject appendEntries with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
-			reply.Term = rf.currentTerm
-			reply.Success = false
-			return
-		} else if args.Term > rf.currentTerm {
-			rf.currentTerm = args.Term
-			rf.votedFor = -1
-			rf.state = Follower
-			rf.persist()
-		}
-	}
-
-	rf.updateTime = time.Now()
-	// 心跳
-	if args.IsHB {
-		// DPrintf(dInfo, "F%d receive heartbeat from L%d\n", me, args.LeaderID)
-		reply.Success = true
-		rf.state = Follower
-	} else {
-		// 非心跳，正常的日志条目
-		// 如果日志在 prevLogIndex 处不匹配，则返回 false
-		if rf.recvdIndex < args.PrevLogIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
-			DPrintf(dInfo, "F%d MISMATCH\n", me)
-			// DPrintf(dInfo, "F%d MISMATCH  lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
-			reply.Success = false
-			reply.Term = rf.currentTerm
-			return
-		}
-
-		// 如果一个已经存在的条目和新条目在相同的索引位置有相同的任期号和索引值，则复制其后的所有条目
-		rf.log = rf.log[:args.PrevLogIndex+1]
-		rf.log = append(rf.log, args.Entries...)
-		rf.recvdIndex = len(rf.log) - 1
-		// DPrintf(dInfo, "F%d update recvdIndex to %d\n", me, rf.recvdIndex)
-	}
-
-	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
-	if args.LeaderCommit > rf.commitIndex {
-		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
-		DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
-		rf.applyCondSignal()
-	}
-
-	reply.Term = rf.currentTerm
-	reply.Success = true
-
-}
-
-func (rf *Raft) AppendEntriesV2(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	// 解决term冲突
-	me := rf.me
-
-	// 首先判断日志条目
-	// 如果本服务器的日志没有对方的日志新，则直接成为跟随者，并在之后更新日志
-	// 如果本服务器的日志比对方的日志新，则直接返回false，不更新日志
-	// 如果两边的日志一样新，则判断任期
-	// 如果对方的任期比本服务器的任期新，则更新任期，成为跟随者，并在之后更新日志
-	// 如果对方的任期比本服务器的任期旧，则直接返回false，不更新日志
-	// 如果两边的任期一样，则直接更新日志
-	// if args.Term > rf.currentTerm {
-	// 	rf.currentTerm = args.Term
-	// 	rf.votedFor = -1
-	// 	rf.state = Follower
-	// 	rf.persist()
-	// } else if args.Term < rf.currentTerm {
-	// 	// Raft 通过比较日志中最后一个条目的索引和任期来确定两个日志中哪个更新。
-	// 	// 如果日志的最后一个条目具有不同的任期，那么任期较晚的日志更新。如果日志以相同的任期结束，那么较长的日志更新。
-
-	// 	if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) || (rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
-	// 		// DPrintf(dDrop, "F%d receive appendEntries from L%d with lower term %d and my term is %d\n", me, args.LeaderID, args.Term, rf.currentTerm)
-	// 		reply.Term = rf.currentTerm
-	// 		reply.Success = false
-	// 		return
-	// 	}
-	// }
-
-	reply.Term = rf.currentTerm
-	reply.Success = false
-
-	if args.Term > rf.currentTerm {
-		rf.currentTerm = args.Term
-		rf.votedFor = -1
-		rf.state = Follower
-		rf.persist()
-		return
-	} else if args.Term < rf.currentTerm {
-		if (rf.log[rf.recvdIndex].Term > args.PrevLogTerm) || (rf.log[rf.recvdIndex].Term == args.PrevLogTerm && rf.recvdIndex > args.PrevLogIndex) {
-			reply.Term = rf.currentTerm
-			reply.Success = false
-			return
-		}
-	}
-
-	rf.updateTime = time.Now()
-
-	if rf.state == Candidate {
-		rf.state = Follower
-	}
-
-	// 心跳
-	if args.IsHB {
-		// DPrintf(dInfo, "F%d receive heartbeat from L%d\n", me, args.LeaderID)
-		reply.Success = true
-		rf.state = Follower
-	} else {
-		// 非心跳，正常的日志条目
-		// 如果日志在 prevLogIndex 处不匹配，则返回 false
-		if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
-			DPrintf(dInfo, "F%d MISMATCH  lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
-			reply.Success = false
-			reply.Term = rf.currentTerm
-			return
-		}
-
-		// 如果一个已经存在的条目和新条目在相同的索引位置有相同的任期号和索引值，则复制其后的所有条目
-		rf.log = rf.log[:args.PrevLogIndex+1]
-		rf.log = append(rf.log, args.Entries...)
-		rf.recvdIndex = len(rf.log) - 1
-		// DPrintf(dInfo, "F%d update recvdIndex to %d\n", me, rf.recvdIndex)
-	}
-
-	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
-	if args.LeaderCommit > rf.commitIndex {
-		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
-		DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
-		rf.applyCondSignal()
-	}
-
-	reply.Term = rf.currentTerm
-	reply.Success = true
-
-}
-
-=======
->>>>>>> 6c0de578d3c176aac0594b415cafe26d4584b629
 // 使用Raft的服务（例如k/v服务器）希望开始对要附加到Raft日志的下一个命令达成一致。
 // 如果此服务器不是领导者，则返回false。否则，开始协议并立即返回。
 // 不能保证此命令将被提交到Raft日志中，因为领导者可能会失败或丢失选举。
@@ -391,7 +174,7 @@ func (rf *Raft) StartV2(command interface{}) (int, int, bool) {
 							DPrintf(dInfo, "F%d update nextIndex to %d\n", server, rf.nextIndex[server])
 							rf.mu.Unlock()
 							// 如果收到复制结果，则将结果发送到commitCh中
-							commitCh <- reply.Success
+							commitCh <- true
 							return
 						} else { // 如果失败，则递减nextIndex，并不断重试
 							rf.nextIndex[server]--

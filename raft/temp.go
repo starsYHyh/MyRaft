@@ -7,10 +7,11 @@ import (
 
 type AppendController struct {
 	// 用于控制附加日志条目的RPC请求
-	wg          sync.WaitGroup   // 用于等待所有的RPC请求完成
-	appendCount int              // 用于记录已经append成功的数量
-	appendCh    chan bool        // 用于通知RPC请求完成
-	timeout     <-chan time.Time // 用于超时控制
+	wg            sync.WaitGroup   // 用于等待所有的RPC请求完成
+	receivedCount int              // 用于记录已经接收到的数量
+	appendCount   int              // 用于记录已经append成功的数量
+	appendCh      chan bool        // 用于通知RPC请求完成
+	timeout       <-chan time.Time // 用于超时控制
 }
 
 func (rf *Raft) entriesToSingle(server int, appendCtrl *AppendController) {
@@ -19,15 +20,17 @@ func (rf *Raft) entriesToSingle(server int, appendCtrl *AppendController) {
 		return
 	}
 	rf.mu.Lock()
-	prevLogIndex := rf.nextIndex[server] - 1
 	var logEntry []LogEntry
 	if rf.nextIndex[server] > rf.recvdIndex {
 		// 代表为心跳包
 		logEntry = nil
 	} else {
 		// 代表为日志包
-		logEntry = rf.log[prevLogIndex+1:]
+		logEntry = rf.log[rf.nextIndex[server]:]
 	}
+	prevLogIndex := rf.nextIndex[server] - 1
+	// DPrintf(dLeader, "L%d send entry %v and commitIndex %d and prevLogIndex %d to F%d\n", rf.me, logEntry, rf.commitIndex, prevLogIndex, server)
+
 	args := AppendEntriesArgs{
 		Term:         rf.currentTerm,
 		LeaderID:     rf.me,
@@ -38,33 +41,32 @@ func (rf *Raft) entriesToSingle(server int, appendCtrl *AppendController) {
 	}
 	rf.mu.Unlock()
 	reply := AppendEntriesReply{}
-	if len(logEntry) > 0 {
-		DPrintf(dInfo, "L%d send entry %v and commitIndex %d and prevLogIndex %d to F%d\n", rf.me, logEntry, rf.commitIndex, prevLogIndex, server)
-	}
 	if rf.sendAppendEntries(server, &args, &reply) {
 		rf.mu.Lock()
 		if reply.Term > rf.currentTerm {
 			rf.setNewTerm(reply.Term)
-			rf.updateTime = time.Now()
 			rf.mu.Unlock()
 			return
 		}
 		if reply.Success {
-			rf.nextIndex[server] += len(logEntry)
+			// 有时候可能会连续重复发送相同的日志，导致nextIndex不断增加，所以需要取最小值
+			rf.nextIndex[server] = min(rf.recvdIndex+1, rf.nextIndex[server]+len(logEntry))
+			// rf.nextIndex[server] += len(logEntry)
 			rf.matchIndex[server] = rf.nextIndex[server] - 1
-			DPrintf(dInfo, "L%d F%d update nextIndex to %d\n", rf.me, server, rf.nextIndex[server])
+			// DPrintf(dSnap, "L%d F%d update nextIndex to %d\n", rf.me, server, rf.nextIndex[server])
 			rf.mu.Unlock()
 			appendCtrl.appendCh <- true
-		} else {
-			// 如果对方收到了，但是因为日志不匹配导致失败，则减小nextIndex，下次心跳或append重试
-			DPrintf(dInfo, "L%d F%d append failed, nextIndex is %v and try to resend\n", rf.me, server, rf.nextIndex)
+		} else if reply.Conflict {
+			appendCtrl.appendCh <- false
 			rf.nextIndex[server]--
 			rf.mu.Unlock()
+		} else {
+			rf.mu.Unlock()
+			appendCtrl.appendCh <- false
 		}
 		return
 	} else {
 		// 如果是因为网络原因导致的失败，则等下次心跳或append时再次尝试
-		DPrintf(dInfo, "L%d F%d refused because of network, try to resend heart is %d\n", rf.me, server, len(logEntry) == 0)
 		appendCtrl.appendCh <- false
 	}
 }
@@ -75,12 +77,12 @@ func (rf *Raft) entriesToSingle(server int, appendCtrl *AppendController) {
 func (rf *Raft) entriesToAll() {
 	rf.mu.Lock()
 	appendCtrl := AppendController{
-		wg:          sync.WaitGroup{},
-		appendCount: 1,
-		appendCh:    make(chan bool, len(rf.peers)-1),
-		timeout:     time.After(rf.heartBeatTime),
+		wg:            sync.WaitGroup{},
+		appendCount:   1,
+		receivedCount: 1,
+		appendCh:      make(chan bool, len(rf.peers)-1),
+		timeout:       time.After(rf.heartBeatTime),
 	}
-	rf.mu.Unlock()
 
 	for i := range rf.peers {
 		if i != rf.me {
@@ -93,11 +95,13 @@ func (rf *Raft) entriesToAll() {
 		appendCtrl.wg.Wait()
 		close(appendCtrl.appendCh)
 	}()
+	rf.mu.Unlock()
 
 	for {
 		if rf.state == Leader {
 			select {
 			case success, ok := <-appendCtrl.appendCh:
+				appendCtrl.receivedCount++
 				if !ok {
 					appendCtrl.appendCh = nil
 				} else if success {
@@ -110,6 +114,9 @@ func (rf *Raft) entriesToAll() {
 					DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d\n", rf.me, preCommitIndex, rf.commitIndex)
 					rf.applyCondSignal()
 					rf.mu.Unlock()
+					return
+				}
+				if appendCtrl.receivedCount == len(rf.peers) {
 					return
 				}
 			case <-appendCtrl.timeout:

@@ -25,6 +25,7 @@ func (rf *Raft) leaderElection() {
 
 	// 需并行向其他服务器发送投票请求，要保证在收到半数以上的选票或者选举超时后立即退出
 	var wg sync.WaitGroup
+	receivedCount := 1
 	voteCount := 1
 	// 创建一个channel，用于接收其他服务器的投票结果，缓冲区大小为peers-1
 	voteCh := make(chan bool, len(rf.peers)-1)
@@ -66,6 +67,7 @@ func (rf *Raft) leaderElection() {
 		if rf.state == Candidate {
 			select {
 			case voteGranted, ok := <-voteCh:
+				receivedCount++
 				if !ok { // 如果voteCh中已经没有了数据
 					voteCh = nil
 				} else if voteGranted { // 否则，如果收到了投票
@@ -89,14 +91,22 @@ func (rf *Raft) leaderElection() {
 					// 如果检测到自己成为了领导者，则立即退出选举
 					return
 				}
+				if receivedCount == len(rf.peers) {
+					// 如果收到了所有服务器的投票结果，则立即退出选举
+
+					DPrintf(dTimer, "C%d receive all vote but not enough and try to relection\n", me)
+					rf.resetTime()
+					return
+				}
 			case <-timeout:
 				// 如果定时器超时，则选举失败
 				DPrintf(dTimer, "C%d election timeout\n", me)
+				rf.resetTime()
 				return
 			}
 		} else {
 			// 如果检测到在选举过程中由候选者变成了跟随者，例如任期原因，则立即退出选举
-			// DPrintf(dVote, "C%d become follower\n", me)
+			DPrintf(dVote, "C%d become follower\n", me)
 			return
 		}
 	}
@@ -125,111 +135,30 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-<<<<<<< HEAD
-	me := rf.me
-	reply.Term = rf.currentTerm
-	reply.VoteGranted = false
-=======
-	// me := rf.me
->>>>>>> 6c0de578d3c176aac0594b415cafe26d4584b629
-	// 首先判断日志条目
-	// 如果本服务器的日志没有对方的日志新，则直接成为跟随者
-	// 如果本服务器的日志比对方的日志新，则直接返回false，
-	// 如果两边的日志一样新，则判断任期
-	// 如果对方的任期比本服务器的任期新，则更新任期，成为跟随者
-	// 如果对方的任期比本服务器的任期旧，则直接返回false
-	// 如果两边的任期一样，则直接更新日志
-<<<<<<< HEAD
-	if (rf.log[rf.recvdIndex].Term > args.LastLogTerm) ||
-		(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
-			rf.recvdIndex > args.LastLogIndex) {
-		DPrintf(dDrop, "F%d reject requestVote with older log\n", me)
-		return
-	} else if (rf.log[rf.recvdIndex].Term < args.LastLogTerm) ||
-		(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
-			rf.recvdIndex < args.LastLogIndex) {
-		DPrintf(dDrop, "F%d receive requestVote with newer log\n", me)
-		rf.currentTerm = args.Term
-		rf.votedFor = -1
-		rf.state = Follower
-		rf.persist()
-	} else if args.Term < rf.currentTerm {
-		DPrintf(dDrop, "F%d reject requestVote with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
-		return
-	} else if args.Term > rf.currentTerm {
-		rf.currentTerm = args.Term
-		rf.votedFor = -1
-		rf.state = Follower
-		rf.persist()
+	DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
+	if args.Term > rf.currentTerm {
+		rf.setNewTerm(args.Term)
+		DPrintf(dVote, "F%d become follower\n", rf.me)
 	}
-
-	reply.Term = rf.currentTerm
-	if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
-		reply.VoteGranted = true
-		rf.votedFor = args.CandidateID
-		rf.currentTerm = args.Term
-=======
-	// if (rf.log[rf.recvdIndex].Term > args.LastLogTerm) ||
-	// 	(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
-	// 		rf.recvdIndex > args.LastLogIndex) {
-	// 	DPrintf(dDrop, "F%d receive appendEntries with older log\n", me)
-	// 	// DPrintf(dDrop, "F%d receive appendEntries with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
-	// 	reply.Term = rf.currentTerm
-	// 	reply.VoteGranted = false
-	// 	return
-	// } else if (rf.log[rf.recvdIndex].Term < args.LastLogTerm) ||
-	// 	(rf.log[rf.recvdIndex].Term == args.LastLogTerm &&
-	// 		rf.recvdIndex < args.LastLogIndex) {
-	// 	DPrintf(dDrop, "F%d receive appendEntries with newer log\n", me)
-	// 	// DPrintf(dDrop, "F%d receive appendEntries with higher term %d and my term is %d\n", me, args.Term, rf.currentTerm)
-	// 	rf.currentTerm = args.Term
-	// 	rf.votedFor = -1
-	// 	rf.state = Follower
-	// 	rf.persist()
-	// } else if args.Term < rf.currentTerm {
-	// 	DPrintf(dDrop, "F%d receive appendEntries with lower term %d and my term is %d\n", me, args.Term, rf.currentTerm)
-	// 	reply.Term = rf.currentTerm
-	// 	reply.VoteGranted = false
-	// 	return
-	// } else if args.Term > rf.currentTerm {
-	// 	rf.currentTerm = args.Term
-	// 	rf.votedFor = -1
-	// 	rf.state = Follower
-	// 	rf.persist()
-	// }
-
-	// if args.Term < rf.currentTerm &&
-	// 	(rf.log[rf.recvdIndex].Term > args.LastLogTerm) ||
-	// 	(rf.log[rf.recvdIndex].Term == args.LastLogTerm && rf.recvdIndex > args.LastLogIndex) {
-	// 	reply.Term = rf.currentTerm
-	// 	reply.VoteGranted = false
-	// 	return
-	// } else {
-	// 	rf.setNewTerm(args.Term)
-	// }
 
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
+		DPrintf(dWarn, "F%d refuse vote for C%d because of term\n", rf.me, args.CandidateID)
 		return
 	}
-
-	if args.Term > rf.currentTerm {
-		rf.setNewTerm(args.Term)
-	}
-	// DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
 
 	if (rf.votedFor == -1 || rf.votedFor == args.CandidateID) &&
 		(args.LastLogTerm > rf.log[rf.recvdIndex].Term ||
 			(args.LastLogTerm == rf.log[rf.recvdIndex].Term && args.LastLogIndex >= rf.recvdIndex)) {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
->>>>>>> 6c0de578d3c176aac0594b415cafe26d4584b629
 		rf.updateTime = time.Now()
-		DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
+		DPrintf(dClient, "F%d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
 	} else {
 		reply.VoteGranted = false
+		DPrintf(dWarn, "F%d refuse vote for C%d because of already have leader\n", rf.me, args.CandidateID)
 	}
 	reply.Term = rf.currentTerm
 }
