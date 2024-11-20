@@ -56,6 +56,9 @@ func (rf *Raft) leaderElection() {
 		if rf.state == Candidate {
 			select {
 			case voteGranted, ok := <-voteCtrl.voteCh:
+				if rf.currentTerm != args.Term || rf.state != Candidate {
+					return
+				}
 				voteCtrl.receivedCount++
 				if !ok {
 					voteCtrl.voteCh = nil
@@ -86,6 +89,9 @@ func (rf *Raft) leaderElection() {
 					return
 				}
 			case <-voteCtrl.timeout:
+				if rf.currentTerm != args.Term || rf.state != Candidate {
+					return
+				}
 				rf.mu.Lock()
 				rf.setNewTerm(rf.currentTerm)
 				rf.resetTime()
@@ -105,11 +111,6 @@ func (rf *Raft) voteToSingle(server int, args *RequestVoteArgs, voteCtrl *VoteCo
 	if rf.sendRequestVote(server, args, &reply) {
 		rf.mu.Lock()
 		// 如果当前任期已经改变或者不是候选人状态，则不再处理
-		if rf.currentTerm != args.Term || rf.state != Candidate {
-			rf.mu.Unlock()
-			voteCtrl.voteCh <- false
-			return
-		}
 		if reply.Term > rf.currentTerm {
 			rf.setNewTerm(reply.Term)
 			rf.updateTime = time.Now()

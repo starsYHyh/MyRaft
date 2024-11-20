@@ -1,0 +1,1314 @@
+000000 TEST Test Backup: leader backs up quickly over incorrect follower logs
+Test (2B): leader backs up quickly over incorrect follower logs ...
+000484 VOTE C4 start election, term is 1
+000485 STAT F0 become follower
+000485 VOTE F0 vote for 4
+000485 STAT F2 become follower
+000485 VOTE F2 vote for 4
+000485 STAT F1 become follower
+000485 VOTE F1 vote for 4
+000485 STAT F3 become follower
+000485 VOTE F3 vote for 4
+000485 STAT C4 become leader
+000504 CLNT L4 received command
+000504 CMIT L4 commit success, commitIndex from 0 to 1
+000606 CMIT F0 update commitIndex to 1
+000606 CMIT F1 update commitIndex to 1
+000606 CMIT F2 update commitIndex to 1
+000606 CMIT F3 update commitIndex to 1
+001126 LOG1 L4, F1, F2, F3 disconnected
+001126 ERRO submit lots of commands that won't commit
+001126 CLNT L4 received command
+001246 CLNT L4 received command
+001367 CLNT L4 received command
+001488 CLNT L4 received command
+001609 CLNT L4 received command
+001730 CLNT L4 received command
+001812 VOTE C3 start election, term is 2
+001812 VOTE C1 start election, term is 2
+001813 VOTE C2 start election, term is 2
+001851 CLNT L4 received command
+001972 CLNT L4 received command
+002093 CLNT L4 received command
+002214 CLNT L4 received command
+002214 STAT F1 become follower
+002265 STAT F3 become follower
+002334 CLNT L4 received command
+002389 STAT F2 become follower
+002455 CLNT L4 received command
+002576 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+002696 CLNT L4 received command
+002696 VOTE C1 start election, term is 3
+ClientEnd.Call(): server failed to reply
+002747 VOTE C3 start election, term is 3
+002817 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+002872 VOTE C2 start election, term is 3
+002938 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+003059 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+003178 STAT F1 become follower
+003179 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+003238 STAT F3 become follower
+003300 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+003421 CLNT L4 received command
+003510 STAT F2 become follower
+ClientEnd.Call(): server failed to reply
+003541 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+003662 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+003720 VOTE C3 start election, term is 4
+003782 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+003901 VOTE C1 start election, term is 4
+003903 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+004024 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+004113 VOTE C2 start election, term is 4
+ClientEnd.Call(): server failed to reply
+004145 CLNT L4 received command
+004266 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+004293 STAT F3 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+004387 CLNT L4 received command
+004422 STAT F1 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+004507 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+004616 STAT F2 become follower
+ClientEnd.Call(): server failed to reply
+004628 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+004749 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+004775 VOTE C3 start election, term is 5
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+004870 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+004991 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005025 VOTE C1 start election, term is 5
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005111 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005219 VOTE C2 start election, term is 5
+ClientEnd.Call(): server failed to reply
+005233 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005321 STAT F3 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005354 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005474 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005595 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005703 STAT F2 become follower
+005710 STAT F1 become follower
+005716 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005837 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005924 VOTE C3 start election, term is 6
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005957 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+006078 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+006194 VOTE C1 start election, term is 6
+006199 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+006307 VOTE C2 start election, term is 6
+006319 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+006440 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+006561 CLNT L4 received command
+006564 STAT F3 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+006682 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+006736 STAT F2 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+006803 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+006856 STAT F1 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+006923 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+007044 CLNT L4 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+007289 VOTE C3 start election, term is 7
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+007338 VOTE C1 start election, term is 7
+007339 VOTE C2 start election, term is 7
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+007666 LOG1 F4, F0 disconnected
+007666 LOG2 F1, F2, F3 reconnected
+007666 ERRO lots of successful commands to new group
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+007829 STAT F3 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+007938 STAT F2 become follower
+007947 STAT F1 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+008088 VOTE C0 start election, term is 2
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+008431 VOTE C3 start election, term is 8
+008431 VOTE C1 start election, term is 8
+008431 STAT F2 become follower
+008431 VOTE F2 vote for 3
+ClientEnd.Call(): server failed to reply
+008469 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+008816 STAT F3 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+008952 VOTE C0 start election, term is 3
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+008993 STAT F1 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+009144 VOTE C2 start election, term is 9
+009144 STAT F1 become follower
+009144 STAT F3 become follower
+009145 VOTE F3 vote for 2
+009144 VOTE F1 vote for 2
+009145 STAT C2 become leader
+009181 CLNT L2 received command
+009181 CMIT L2 commit success, commitIndex from 1 to 2
+009266 CMIT F3 update commitIndex to 2
+009268 CMIT F1 update commitIndex to 2
+009284 CLNT L2 received command
+009284 CMIT L2 commit success, commitIndex from 2 to 3
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+009350 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+009390 CMIT F3 update commitIndex to 3
+009390 CMIT F1 update commitIndex to 3
+009409 CLNT L2 received command
+009409 CMIT L2 commit success, commitIndex from 3 to 4
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+009511 CMIT F1 update commitIndex to 4
+009511 CMIT F3 update commitIndex to 4
+009513 CLNT L2 received command
+009513 CMIT L2 commit success, commitIndex from 4 to 5
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+009632 CMIT F1 update commitIndex to 5
+009632 CMIT F3 update commitIndex to 5
+009637 CLNT L2 received command
+009637 CMIT L2 commit success, commitIndex from 5 to 6
+ClientEnd.Call(): server failed to reply
+009753 CMIT F3 update commitIndex to 6
+009753 CMIT F1 update commitIndex to 6
+ClientEnd.Call(): server failed to reply
+009760 CLNT L2 received command
+009760 CMIT L2 commit success, commitIndex from 6 to 7
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+009832 VOTE C0 start election, term is 4
+ClientEnd.Call(): server failed to reply
+009873 CMIT F1 update commitIndex to 7
+009873 CMIT F3 update commitIndex to 7
+009884 CLNT L2 received command
+009885 CMIT L2 commit success, commitIndex from 7 to 8
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+009994 CMIT F3 update commitIndex to 8
+009994 CMIT F1 update commitIndex to 8
+010008 CLNT L2 received command
+010009 CMIT L2 commit success, commitIndex from 8 to 9
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+010115 CMIT F1 update commitIndex to 9
+010115 CMIT F3 update commitIndex to 9
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+010132 CLNT L2 received command
+010132 CMIT L2 commit success, commitIndex from 9 to 10
+ClientEnd.Call(): server failed to reply
+010199 STAT F0 become follower
+010236 CMIT F3 update commitIndex to 10
+010236 CMIT F1 update commitIndex to 10
+ClientEnd.Call(): server failed to reply
+010256 CLNT L2 received command
+010256 CMIT L2 commit success, commitIndex from 10 to 11
+ClientEnd.Call(): server failed to reply
+010358 CMIT F3 update commitIndex to 11
+010358 CMIT F1 update commitIndex to 11
+ClientEnd.Call(): server failed to reply
+010379 CLNT L2 received command
+010380 CMIT L2 commit success, commitIndex from 11 to 12
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+010479 CMIT F3 update commitIndex to 12
+010479 CMIT F1 update commitIndex to 12
+010483 CLNT L2 received command
+010483 CMIT L2 commit success, commitIndex from 12 to 13
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+010600 CMIT F1 update commitIndex to 13
+010600 CMIT F3 update commitIndex to 13
+010606 CLNT L2 received command
+010606 CMIT L2 commit success, commitIndex from 13 to 14
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+010720 CMIT F3 update commitIndex to 14
+010720 CMIT F1 update commitIndex to 14
+ClientEnd.Call(): server failed to reply
+010729 CLNT L2 received command
+010730 CMIT L2 commit success, commitIndex from 14 to 15
+ClientEnd.Call(): server failed to reply
+010841 CMIT F3 update commitIndex to 15
+010841 CMIT F1 update commitIndex to 15
+010853 CLNT L2 received command
+010853 CMIT L2 commit success, commitIndex from 15 to 16
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+010925 VOTE C0 start election, term is 5
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+010963 CMIT F1 update commitIndex to 16
+010963 CMIT F3 update commitIndex to 16
+010977 CLNT L2 received command
+010977 CMIT L2 commit success, commitIndex from 16 to 17
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+011084 CMIT F1 update commitIndex to 17
+011084 CMIT F3 update commitIndex to 17
+011100 CLNT L2 received command
+011100 CMIT L2 commit success, commitIndex from 17 to 18
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+011204 CMIT F1 update commitIndex to 18
+011204 CMIT F3 update commitIndex to 18
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+011223 CLNT L2 received command
+011224 CMIT L2 commit success, commitIndex from 18 to 19
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+011323 STAT F0 become follower
+011325 CMIT F1 update commitIndex to 19
+011325 CMIT F3 update commitIndex to 19
+011326 CLNT L2 received command
+011326 CMIT L2 commit success, commitIndex from 19 to 20
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+011446 CMIT F1 update commitIndex to 20
+011446 CMIT F3 update commitIndex to 20
+011449 CLNT L2 received command
+011450 CMIT L2 commit success, commitIndex from 20 to 21
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+011567 CMIT F3 update commitIndex to 21
+011567 CMIT F1 update commitIndex to 21
+011573 CLNT L2 received command
+011573 CMIT L2 commit success, commitIndex from 21 to 22
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+011688 CMIT F1 update commitIndex to 22
+011688 CMIT F3 update commitIndex to 22
+011697 CLNT L2 received command
+011698 CMIT L2 commit success, commitIndex from 22 to 23
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+011809 CMIT F1 update commitIndex to 23
+011809 CMIT F3 update commitIndex to 23
+011821 CLNT L2 received command
+011822 CMIT L2 commit success, commitIndex from 23 to 24
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+011930 CMIT F3 update commitIndex to 24
+011930 CMIT F1 update commitIndex to 24
+ClientEnd.Call(): server failed to reply
+011946 CLNT L2 received command
+011946 CMIT L2 commit success, commitIndex from 24 to 25
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+012046 VOTE C0 start election, term is 6
+012051 CMIT F3 update commitIndex to 25
+012051 CMIT F1 update commitIndex to 25
+ClientEnd.Call(): server failed to reply
+012070 CLNT L2 received command
+012071 CMIT L2 commit success, commitIndex from 25 to 26
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+012172 CMIT F3 update commitIndex to 26
+012172 CMIT F1 update commitIndex to 26
+012173 CLNT L2 received command
+012173 CMIT L2 commit success, commitIndex from 26 to 27
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+012292 CMIT F1 update commitIndex to 27
+012292 CMIT F3 update commitIndex to 27
+012297 CLNT L2 received command
+012297 CMIT L2 commit success, commitIndex from 27 to 28
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+012413 CMIT F3 update commitIndex to 28
+012413 CMIT F1 update commitIndex to 28
+012421 CLNT L2 received command
+012421 CMIT L2 commit success, commitIndex from 28 to 29
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+012535 CMIT F3 update commitIndex to 29
+012535 CMIT F1 update commitIndex to 29
+012544 CLNT L2 received command
+012544 CMIT L2 commit success, commitIndex from 29 to 30
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+012656 CMIT F3 update commitIndex to 30
+012656 CMIT F1 update commitIndex to 30
+012668 CLNT L2 received command
+012669 CMIT L2 commit success, commitIndex from 30 to 31
+ClientEnd.Call(): server failed to reply
+012697 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+012776 CMIT F1 update commitIndex to 31
+012776 CMIT F3 update commitIndex to 31
+012792 CLNT L2 received command
+012792 CMIT L2 commit success, commitIndex from 31 to 32
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+012897 CMIT F3 update commitIndex to 32
+012897 CMIT F1 update commitIndex to 32
+012915 CLNT L2 received command
+012916 CMIT L2 commit success, commitIndex from 32 to 33
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+013017 CMIT F3 update commitIndex to 33
+013017 CMIT F1 update commitIndex to 33
+013018 CLNT L2 received command
+013019 CMIT L2 commit success, commitIndex from 33 to 34
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+013138 CMIT F1 update commitIndex to 34
+013138 CMIT F3 update commitIndex to 34
+013141 CLNT L2 received command
+013142 CMIT L2 commit success, commitIndex from 34 to 35
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+013259 CMIT F1 update commitIndex to 35
+013259 CMIT F3 update commitIndex to 35
+013265 CLNT L2 received command
+013266 CMIT L2 commit success, commitIndex from 35 to 36
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+013380 CMIT F1 update commitIndex to 36
+013380 CMIT F3 update commitIndex to 36
+ClientEnd.Call(): server failed to reply
+013391 CLNT L2 received command
+013391 CMIT L2 commit success, commitIndex from 36 to 37
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+013421 VOTE C0 start election, term is 7
+ClientEnd.Call(): server failed to reply
+013501 CMIT F1 update commitIndex to 37
+013501 CMIT F3 update commitIndex to 37
+013515 CLNT L2 received command
+013516 CMIT L2 commit success, commitIndex from 37 to 38
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+013623 CMIT F1 update commitIndex to 38
+013623 CMIT F3 update commitIndex to 38
+013639 CLNT L2 received command
+013640 CMIT L2 commit success, commitIndex from 38 to 39
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+013744 CMIT F3 update commitIndex to 39
+013744 CMIT F1 update commitIndex to 39
+013765 CLNT L2 received command
+013765 CMIT L2 commit success, commitIndex from 39 to 40
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+013866 CMIT F1 update commitIndex to 40
+013866 CMIT F3 update commitIndex to 40
+013869 CLNT L2 received command
+013869 CMIT L2 commit success, commitIndex from 40 to 41
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+013986 CMIT F3 update commitIndex to 41
+013986 CMIT F1 update commitIndex to 41
+013991 CLNT L2 received command
+013992 CMIT L2 commit success, commitIndex from 41 to 42
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+014108 CMIT F3 update commitIndex to 42
+014108 CMIT F1 update commitIndex to 42
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+014116 CLNT L2 received command
+014117 CMIT L2 commit success, commitIndex from 42 to 43
+ClientEnd.Call(): server failed to reply
+014135 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+014228 CMIT F3 update commitIndex to 43
+014228 CMIT F1 update commitIndex to 43
+014241 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+014242 CMIT L2 commit success, commitIndex from 43 to 44
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+014349 CMIT F1 update commitIndex to 44
+014349 CMIT F3 update commitIndex to 44
+ClientEnd.Call(): server failed to reply
+014370 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+014371 CMIT L2 commit success, commitIndex from 44 to 45
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+014470 CMIT F3 update commitIndex to 45
+014470 CMIT F1 update commitIndex to 45
+014475 CLNT L2 received command
+014475 CMIT L2 commit success, commitIndex from 45 to 46
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+014591 CMIT F3 update commitIndex to 46
+014591 CMIT F1 update commitIndex to 46
+ClientEnd.Call(): server failed to reply
+014599 CLNT L2 received command
+014599 CMIT L2 commit success, commitIndex from 46 to 47
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+014712 CMIT F1 update commitIndex to 47
+014712 CMIT F3 update commitIndex to 47
+ClientEnd.Call(): server failed to reply
+014722 CLNT L2 received command
+014723 CMIT L2 commit success, commitIndex from 47 to 48
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+014833 CMIT F3 update commitIndex to 48
+014833 CMIT F1 update commitIndex to 48
+014846 CLNT L2 received command
+014847 CMIT L2 commit success, commitIndex from 48 to 49
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+014859 VOTE C0 start election, term is 8
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+014954 CMIT F3 update commitIndex to 49
+014954 CMIT F1 update commitIndex to 49
+ClientEnd.Call(): server failed to reply
+014970 CLNT L2 received command
+014970 CMIT L2 commit success, commitIndex from 49 to 50
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+015075 CMIT F1 update commitIndex to 50
+015075 CMIT F3 update commitIndex to 50
+ClientEnd.Call(): server failed to reply
+015094 CLNT L2 received command
+015095 CMIT L2 commit success, commitIndex from 50 to 51
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+015196 CMIT F3 update commitIndex to 51
+015196 CMIT F1 update commitIndex to 51
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+015294 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+015665 LOG1 F1 disconnected
+015665 ERRO lots more commands that won't commit
+015665 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+015776 VOTE C0 start election, term is 9
+015787 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+015907 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+015990 VOTE C1 start election, term is 10
+ClientEnd.Call(): server failed to reply
+016027 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+016148 CLNT L2 received command
+016188 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+016269 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+016389 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+016469 STAT F1 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+016509 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+016630 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+016751 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+016871 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+016913 VOTE C0 start election, term is 10
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+016992 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+017073 VOTE C1 start election, term is 11
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+017112 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+017233 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+017340 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+017354 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+017474 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+017553 STAT F1 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+017595 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+017715 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+017836 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+017944 VOTE C0 start election, term is 11
+ClientEnd.Call(): server failed to reply
+017956 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+018035 VOTE C1 start election, term is 12
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+018076 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+018197 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+018317 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+018438 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+018509 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+018550 STAT F1 become follower
+018559 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+018680 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+018800 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+018921 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+019042 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+019112 VOTE C0 start election, term is 12
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+019154 VOTE C1 start election, term is 13
+019162 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+019283 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+019404 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+019525 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+019645 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+019766 CLNT L2 received command
+019797 STAT F1 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+019820 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+019887 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+020008 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+020128 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+020249 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+020280 VOTE C1 start election, term is 14
+020302 VOTE C0 start election, term is 13
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+020370 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+020491 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+020611 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+020665 STAT F1 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+020732 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+020853 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+020974 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+021022 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+021094 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+021215 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+021269 VOTE C1 start election, term is 15
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+021336 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+021456 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+021577 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+021625 VOTE C0 start election, term is 14
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+021976 STAT F1 become follower
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+022198 LOG1 F0 disconnected
+022198 LOG1 F1 disconnected
+022198 LOG1 F2 disconnected
+022198 LOG1 F3 disconnected
+022198 LOG1 F4 disconnected
+022198 LOG2 L4, F0, F1 reconnected
+022198 ERRO lots of successful commands to new group
+022198 CLNT L4 received command
+022199 STAT F4 become follower
+022199 STAT F4 become follower
+022199 VOTE C4 start election, term is 16
+022199 STAT F0 become follower
+022199 STAT F1 become follower
+022200 VOTE F1 vote for 4
+022200 STAT F0 become follower
+022200 VOTE F0 vote for 4
+022200 STAT C4 become leader
+022200 DROP F0 MISMATCH lastIndex is 51 but prevlogindex is 52
+022200 INFO F0 update nextIndex from 53 to 52
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+022441 CMIT L4 commit success, commitIndex from 1 to 52
+4: log map[1:5579850888798252562]; server map[1:5579850888798252562 2:3415441629402082279 3:8643134506507472267 4:2982763833915034517 5:2412135286690584990 6:1121744252010209682 7:7972021538211302893 8:5303633000859698491 9:4943882459812698858 10:5944578827533871415 11:2036122773832410154 12:8191470082890421014 13:7071788026298757298 14:227893667847380447 15:90821667140657801 16:1041145518921043349 17:8938050966147916054 18:1292468558226207395 19:322148678265304523 20:6841290106811269826 21:5775050071025864091 22:3645304329087049818 23:1253272699335066639 24:4129452189598031151 25:6062285448955338704 26:342773776304408654 27:9162440489782798779 28:4220606651039857380 29:2789257691886117639 30:78719138282278269 31:7330480556504724809 32:401400659219582566 33:850488852669405754 34:3519203508374306064 35:1667536087361727505 36:2486433048486333157 37:329314544437823093 38:281571837540858495 39:4747049823736123073 40:3469155524215830986 41:5510832659322182621 42:4792271697230661427 43:9216926693942931044 44:2699432945305209403 45:1951312455847560393 46:4537310233110512751 47:5673345062932642362 48:6190971004055383494 49:4348943994139923439 50:3918225941183494915 51:5605236440136716819]
+4: log map[1:5579850888798252562]; server map[1:5579850888798252562 2:3415441629402082279 3:8643134506507472267 4:2982763833915034517 5:2412135286690584990 6:1121744252010209682 7:7972021538211302893 8:5303633000859698491 9:4943882459812698858 10:5944578827533871415 11:2036122773832410154 12:8191470082890421014 13:7071788026298757298 14:227893667847380447 15:90821667140657801 16:1041145518921043349 17:8938050966147916054 18:1292468558226207395 19:322148678265304523 20:6841290106811269826 21:5775050071025864091 22:3645304329087049818 23:1253272699335066639 24:4129452189598031151 25:6062285448955338704 26:342773776304408654 27:9162440489782798779 28:4220606651039857380 29:2789257691886117639 30:78719138282278269 31:7330480556504724809 32:401400659219582566 33:850488852669405754 34:3519203508374306064 35:1667536087361727505 36:2486433048486333157 37:329314544437823093 38:281571837540858495 39:4747049823736123073 40:3469155524215830986 41:5510832659322182621 42:4792271697230661427 43:9216926693942931044 44:2699432945305209403 45:1951312455847560393 46:4537310233110512751 47:5673345062932642362 48:6190971004055383494 49:4348943994139923439 50:3918225941183494915 51:5605236440136716819]
+4: log map[1:5579850888798252562]; server map[1:5579850888798252562 2:3415441629402082279 3:8643134506507472267 4:2982763833915034517 5:2412135286690584990 6:1121744252010209682 7:7972021538211302893 8:5303633000859698491 9:4943882459812698858 10:5944578827533871415 11:2036122773832410154 12:8191470082890421014 13:7071788026298757298 14:227893667847380447 15:90821667140657801 16:1041145518921043349 17:8938050966147916054 18:1292468558226207395 19:322148678265304523 20:6841290106811269826 21:5775050071025864091 22:3645304329087049818 23:1253272699335066639 24:4129452189598031151 25:6062285448955338704 26:342773776304408654 27:9162440489782798779 28:4220606651039857380 29:2789257691886117639 30:78719138282278269 31:7330480556504724809 32:401400659219582566 33:850488852669405754 34:3519203508374306064 35:1667536087361727505 36:2486433048486333157 37:329314544437823093 38:281571837540858495 39:4747049823736123073 40:3469155524215830986 41:5510832659322182621 42:4792271697230661427 43:9216926693942931044 44:2699432945305209403 45:1951312455847560393 46:4537310233110512751 47:5673345062932642362 48:6190971004055383494 49:4348943994139923439 50:3918225941183494915 51:5605236440136716819]
+apply error: commit index=2 server=4 1724168412219912194 != server=3 3415441629402082279
+exit status 1
+FAIL	MyRaft/raft	22.444s

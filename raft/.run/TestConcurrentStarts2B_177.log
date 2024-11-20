@@ -1,0 +1,31 @@
+000000 TEST Test ConcurrentStarts: concurrent Start()s
+Test (2B): concurrent Start()s ...
+000482 VOTE C2 start election, term is 1
+000482 STAT F0 become follower
+000482 STAT F1 become follower
+000482 VOTE F0 vote for 2
+000482 VOTE F1 vote for 2
+000482 STAT C2 become leader
+000541 CLNT L2 received command
+000541 CMIT L2 commit success, commitIndex from 0 to 1
+000541 CLNT L2 received command
+000541 CLNT L2 received command
+000541 CLNT L2 received command
+000541 CMIT F1 update commitIndex to 1
+000541 CLNT L2 received command
+000541 CMIT F0 update commitIndex to 1
+000541 CLNT L2 received command
+000541 CMIT L2 commit success, commitIndex from 1 to 6
+000541 CMIT F0 update commitIndex to 6
+000541 DROP F1 MISMATCH lastIndex is 5 but prevlogindex is 6
+000541 INFO F1 update nextIndex from 7 to 6
+000542 DROP F1 MISMATCH lastIndex is 5 but prevlogindex is 6
+panic: runtime error: index out of range [6] with length 6
+
+goroutine 21 [running]:
+MyRaft/raft.(*Raft).applyLog(0xc000192000)
+	/home/firefly/Codes/go/myraft/raft/append_entries.go:279 +0x185
+created by MyRaft/raft.Make in goroutine 18
+	/home/firefly/Codes/go/myraft/raft/raft.go:273 +0x336
+exit status 2
+FAIL	MyRaft/raft	0.548s

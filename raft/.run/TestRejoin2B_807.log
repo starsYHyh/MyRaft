@@ -1,0 +1,81 @@
+000000 TEST Test Rejoin: rejoin of partitioned leader
+Test (2B): rejoin of partitioned leader ...
+000604 VOTE C2 start election, term is 1
+000605 STAT F0 become follower
+000605 STAT F1 become follower
+000605 VOTE F1 vote for 2
+000605 STAT C2 become leader
+000605 VOTE F0 vote for 2
+000654 CLNT L2 received command
+000655 CMIT L2 commit success, commitIndex from 0 to 1
+000725 CMIT F0 update commitIndex to 1
+000726 CMIT F1 update commitIndex to 1
+001222 LOG1 L2 disconnected
+001222 CLNT L2 received command
+ClientEnd.Call(): server failed to reply
+001342 CLNT L2 received command
+001463 CLNT L2 received command
+001931 VOTE C1 start election, term is 2
+001931 VOTE C0 start election, term is 2
+002419 STAT F1 become follower
+002458 STAT F0 become follower
+ClientEnd.Call(): server failed to reply
+003022 VOTE C1 start election, term is 3
+003022 STAT F0 become follower
+003022 VOTE F0 vote for 1
+003023 STAT C1 become leader
+003047 CLNT L1 received command
+003048 CMIT L1 commit success, commitIndex from 1 to 2
+ClientEnd.Call(): server failed to reply
+003144 CMIT F0 update commitIndex to 2
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+003631 LOG1 L1 disconnected
+003631 LOG2 L2 reconnected
+003631 CLNT L2 received command
+003631 STAT F2 become follower
+ClientEnd.Call(): server failed to reply
+003739 VOTE C2 start election, term is 4
+003739 STAT F0 become follower
+003739 VOTE F0 refuse vote for C2 because of already have leader
+004267 VOTE C0 start election, term is 5
+004268 STAT F2 become follower
+004268 VOTE F2 vote for 0
+004268 STAT C0 become leader
+004268 DROP F2 MISMATCH lastTerm is 1 but prevlogterm is 3
+004268 INFO F2 update nextIndex from 3 to 1
+004509 CMIT F2 update commitIndex to 2
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+005758 CLNT L0 received command
+005758 CMIT L0 commit success, commitIndex from 2 to 3
+005840 CMIT F2 update commitIndex to 3
+005841 LOG2 L1 reconnected
+005841 CLNT L1 received command
+005841 STAT F1 become follower
+ClientEnd.Call(): server failed to reply
+005924 VOTE C1 start election, term is 6
+005924 STAT F0 become follower
+005924 VOTE F0 refuse vote for C1 because of already have leader
+005924 STAT F2 become follower
+005924 VOTE F2 vote for 1
+005924 STAT C1 become leader
+005925 DROP F0 MISMATCH lastTerm is 5 but prevlogterm is 3
+005925 INFO F0 update nextIndex from 4 to 3
+005925 CMIT L1 commit success, commitIndex from 2 to 3
+1: log map[1:101 2:103]; server map[1:101 2:103 3:104]
+1: log map[1:101 2:103]; server map[1:101 2:103 3:104]
+apply error: commit index=3 server=1 105 != server=2 104
+exit status 1
+FAIL	MyRaft/raft	5.929s

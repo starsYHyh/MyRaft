@@ -50,6 +50,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 // 防止在发送日志的过程中，又接收到了新的日志，导致发送的日志为新的日志
 func (rf *Raft) entriesToAll() {
 	rf.mu.Lock()
+	term := rf.currentTerm
 	appendCtrl := AppendController{
 		wg:            sync.WaitGroup{},
 		appendCount:   1,
@@ -75,6 +76,9 @@ func (rf *Raft) entriesToAll() {
 		if rf.state == Leader {
 			select {
 			case success, ok := <-appendCtrl.appendCh:
+				if rf.currentTerm != term || rf.state != Leader {
+					return
+				}
 				appendCtrl.receivedCount++
 				if !ok {
 					appendCtrl.appendCh = nil
@@ -151,11 +155,6 @@ func (rf *Raft) entriesToSingle(server int, appendCtrl *AppendController) {
 	if rf.sendAppendEntries(server, &args, &reply) {
 		rf.mu.Lock()
 		// 需要判断当前任期是否已经过期，因为在发送RPC请求的过程中，本服务器可能已经不是leader了
-		if rf.currentTerm != args.Term || rf.state != Leader {
-			rf.mu.Unlock()
-			appendCtrl.appendCh <- false
-			return
-		}
 		if reply.Term > rf.currentTerm {
 			rf.setNewTerm(reply.Term)
 			rf.mu.Unlock()
