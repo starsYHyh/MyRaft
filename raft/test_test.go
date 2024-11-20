@@ -534,6 +534,7 @@ func TestRejoin2B(t *testing.T) {
 	cfg.end()
 }
 
+// 测试在网络分区的情况下，leader能够快速找到不匹配的位置，并成功提交
 func TestBackup2B(t *testing.T) {
 	servers := 5
 	cfg := make_config(t, servers, false, false)

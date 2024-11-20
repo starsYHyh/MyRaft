@@ -144,7 +144,7 @@ func (rf *Raft) entriesToSingle(server int, appendCtrl *AppendController) {
 			appendCtrl.appendCh <- true
 		} else if reply.Conflict {
 			appendCtrl.appendCh <- false
-			rf.nextIndex[server]--
+			rf.nextIndex[server] = reply.ConnflictIndex
 			rf.mu.Unlock()
 		} else {
 			rf.mu.Unlock()
@@ -198,10 +198,21 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if args.PrevLogIndex > rf.recvdIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 		if args.PrevLogIndex <= rf.recvdIndex {
 			DPrintf(dInfo, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
+			// 找到冲突条目的任期和该任期中它存储的第一个索引
+			reply.ConnflictTerm = rf.log[args.PrevLogIndex].Term
+			for i := args.PrevLogIndex; i >= 0; i-- {
+				if rf.log[i].Term != reply.ConnflictTerm {
+					reply.ConnflictIndex = i + 1
+					break
+				}
+			}
 		} else {
 			DPrintf(dInfo, "F%d MISMATCH lastIndex is %d but prevlogindex is %d\n", me, rf.recvdIndex, args.PrevLogIndex)
+			reply.ConnflictTerm = rf.currentTerm
+			reply.ConnflictIndex = rf.recvdIndex + 1
 		}
 
+		DPrintf(dDrop, "F%d change nextIndex from %d to %d\n", me, args.PrevLogIndex+1, reply.ConnflictIndex)
 		reply.Conflict = true // 说明日志不匹配
 		reply.Term = rf.currentTerm
 		return
@@ -238,7 +249,6 @@ func (rf *Raft) applyLog() {
 	for !rf.killed() {
 		if rf.commitIndex > rf.lastApplied {
 			// 将日志应用到状态机
-			// preApplied := rf.lastApplied
 			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
 				rf.applyCh <- ApplyMsg{
 					CommandValid: true,
