@@ -207,6 +207,7 @@ func (rf *Raft) setNewTerm(term int) {
 	rf.currentTerm = term
 	rf.votedFor = -1
 	rf.state = Follower
+	DPrintf(dState, "F%d become follower\n", rf.me)
 	rf.persist()
 }
 
@@ -220,12 +221,12 @@ func (rf *Raft) ticker() {
 		time.Sleep(rf.heartBeatTime)
 		// 如果是领导者，则每过一个heartbeat时间发送一次心跳
 		if rf.state == Leader {
-			rf.heartBeat()
+			rf.entriesToAll()
 		}
 
 		// 如果是跟随者，则检测距离上次收到心跳的时间是否超过了选举超时时间
 		// 如果超过了，则启动新选举
-		if (rf.state == Follower || rf.state == Candidate) && time.Since(rf.updateTime) > rf.electionTimeout {
+		if rf.state == Follower && time.Since(rf.updateTime) > rf.electionTimeout {
 			rf.leaderElection()
 		}
 	}

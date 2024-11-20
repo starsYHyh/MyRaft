@@ -31,6 +31,7 @@ TOPICS = {
     "WARN": "#d08341",
     "ERRO": "#fe2626",
     "TRCE": "#fe2626",
+    "STAT": "#ffff00"
 }
 # fmt: on
 

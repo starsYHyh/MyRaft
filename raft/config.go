@@ -602,7 +602,6 @@ func (cfg *config) one(cmd interface{}, expectedServers int, retry bool) int {
 					}
 				}
 				time.Sleep(20 * time.Millisecond)
-				// DPrintf(dWarn, "length of logs is %d", len(cfg.logs))
 			}
 			if !retry {
 				cfg.t.Fatalf("one(%v) failed to reach agreement", cmd)
@@ -644,7 +643,7 @@ func (cfg *config) end() {
 		ncmds := cfg.maxIndex - cfg.maxIndex0   // number of Raft agreements reported
 		cfg.mu.Unlock()
 
-		fmt.Printf("  ... Passed --")
+		fmt.Printf("  --- Passed --")
 		fmt.Printf("  %4.1f  %d %4d %7d %4d\n", t, npeers, nrpc, nbytes, ncmds)
 	}
 }

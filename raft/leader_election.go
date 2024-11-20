@@ -5,15 +5,23 @@ import (
 	"time"
 )
 
-// 发起领导者选举
+type VoteController struct {
+	// 用于控制投票的RPC请求
+	wg            sync.WaitGroup   // 用于等待所有的RPC请求完成
+	receivedCount int              // 用于记录已经接收到的数量
+	voteCount     int              // 用于记录已经投票成功的数量
+	voteCh        chan bool        // 用于通知RPC请求完成
+	timeout       <-chan time.Time // 用于超时控制
+}
+
 func (rf *Raft) leaderElection() {
-	// 初始化参数
 	rf.mu.Lock()
 	me := rf.me
 	rf.currentTerm++
-	rf.votedFor = me     // 为自己投票
-	rf.state = Candidate // 转换为候选者
-	rf.resetTime()       // 重置选举时间、更新时间
+	rf.votedFor = me
+	rf.state = Candidate
+	rf.resetTime()
+
 	args := RequestVoteArgs{
 		Term:         rf.currentTerm, // 当前任期
 		CandidateID:  me,
@@ -21,94 +29,92 @@ func (rf *Raft) leaderElection() {
 		LastLogTerm:  rf.log[rf.recvdIndex].Term,
 	}
 	DPrintf(dVote, "C%d start election, term is %d", me, rf.currentTerm)
-	rf.mu.Unlock()
 
-	// 需并行向其他服务器发送投票请求，要保证在收到半数以上的选票或者选举超时后立即退出
-	var wg sync.WaitGroup
-	receivedCount := 1
-	voteCount := 1
-	// 创建一个channel，用于接收其他服务器的投票结果，缓冲区大小为peers-1
-	voteCh := make(chan bool, len(rf.peers)-1)
-	// 创建一个定时器，用于选举超时
-	timeout := time.After(rf.electionTimeout)
+	voteCtrl := VoteController{
+		wg:            sync.WaitGroup{},
+		voteCount:     1,
+		receivedCount: 1,
+		voteCh:        make(chan bool, len(rf.peers)-1),
+		timeout:       time.After(rf.electionTimeout),
+	}
+
 	for i := range rf.peers {
 		if i != me {
-			wg.Add(1)
-			// 向其他服务器发送投票请求
-			go func(server int) {
-				defer wg.Done()
-				reply := RequestVoteReply{}
-				if rf.sendRequestVote(server, &args, &reply) {
-					// 如果对方的Term更大，则更新自己的Term，转换为跟随者，将投票状态清空
-					// 对应着论文中图二的rules for all servers
-					rf.mu.Lock()
-					if reply.Term > rf.currentTerm {
-						rf.setNewTerm(reply.Term)
-						rf.updateTime = time.Now()
-						return
-					}
-					rf.mu.Unlock()
-					// 如果收到投票结果，则将结果发送到voteCh中
-					voteCh <- reply.VoteGranted
-				} else {
-					// 如果没有收到，则发送false到voteCh中
-					voteCh <- false
-				}
-			}(i)
+			voteCtrl.wg.Add(1)
+			go rf.voteToSingle(i, &args, &voteCtrl)
 		}
 	}
 
 	go func() {
-		wg.Wait()
-		close(voteCh) // 关闭voteCh的写入端
+		voteCtrl.wg.Wait()
+		close(voteCtrl.voteCh)
 	}()
+
+	rf.mu.Unlock()
 
 	for {
 		if rf.state == Candidate {
 			select {
-			case voteGranted, ok := <-voteCh:
-				receivedCount++
-				if !ok { // 如果voteCh中已经没有了数据
-					voteCh = nil
-				} else if voteGranted { // 否则，如果收到了投票
-					voteCount++
+			case voteGranted, ok := <-voteCtrl.voteCh:
+				voteCtrl.receivedCount++
+				if !ok {
+					voteCtrl.voteCh = nil
+				} else if voteGranted {
+					voteCtrl.voteCount++
 				}
-				if voteCount > len(rf.peers)/2 {
 
+				if voteCtrl.voteCount > len(rf.peers)/2 {
 					rf.mu.Lock()
 					rf.state = Leader
 					for i := range rf.nextIndex {
-						rf.nextIndex[i] = len(rf.log)
+						rf.nextIndex[i] = rf.recvdIndex + 1
 						rf.matchIndex[i] = 0
 					}
 
 					rf.recvdIndex = len(rf.log) - 1
 					rf.mu.Unlock()
 
-					DPrintf(dLeader, "C%d become leader\n", me)
-					// 成为领导者后，立即发送心跳
-					rf.heartBeat()
-					// 如果检测到自己成为了领导者，则立即退出选举
+					DPrintf(dState, "C%d become leader\n", me)
+					rf.entriesToAll()
 					return
 				}
-				if receivedCount == len(rf.peers) {
-					// 如果收到了所有服务器的投票结果，则立即退出选举
-
-					DPrintf(dTimer, "C%d receive all vote but not enough and try to relection\n", me)
+				if voteCtrl.receivedCount == len(rf.peers) {
+					rf.mu.Lock()
+					rf.setNewTerm(rf.currentTerm)
 					rf.resetTime()
+					rf.mu.Unlock()
 					return
 				}
-			case <-timeout:
-				// 如果定时器超时，则选举失败
-				DPrintf(dTimer, "C%d election timeout\n", me)
+			case <-voteCtrl.timeout:
+				rf.mu.Lock()
+				rf.setNewTerm(rf.currentTerm)
 				rf.resetTime()
+				rf.mu.Unlock()
 				return
 			}
 		} else {
-			// 如果检测到在选举过程中由候选者变成了跟随者，例如任期原因，则立即退出选举
-			DPrintf(dVote, "C%d become follower\n", me)
 			return
 		}
+	}
+}
+
+func (rf *Raft) voteToSingle(server int, args *RequestVoteArgs, voteCtrl *VoteController) {
+	defer voteCtrl.wg.Done()
+	reply := RequestVoteReply{}
+
+	if rf.sendRequestVote(server, args, &reply) {
+		rf.mu.Lock()
+		if reply.Term > rf.currentTerm {
+			rf.setNewTerm(reply.Term)
+			rf.updateTime = time.Now()
+			rf.mu.Unlock()
+			return
+		}
+		rf.mu.Unlock()
+
+		voteCtrl.voteCh <- reply.VoteGranted
+	} else {
+		voteCtrl.voteCh <- false
 	}
 }
 
@@ -135,16 +141,15 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
+	// DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
 	if args.Term > rf.currentTerm {
 		rf.setNewTerm(args.Term)
-		DPrintf(dVote, "F%d become follower\n", rf.me)
 	}
 
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
-		DPrintf(dWarn, "F%d refuse vote for C%d because of term\n", rf.me, args.CandidateID)
+		DPrintf(dVote, "F%d refuse vote for C%d because of term\n", rf.me, args.CandidateID)
 		return
 	}
 
@@ -154,11 +159,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
 		rf.updateTime = time.Now()
-		DPrintf(dClient, "F%d vote for %d\n", rf.me, args.CandidateID)
+		DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
 	} else {
 		reply.VoteGranted = false
-		DPrintf(dWarn, "F%d refuse vote for C%d because of already have leader\n", rf.me, args.CandidateID)
+		DPrintf(dVote, "F%d refuse vote for C%d because of already have leader\n", rf.me, args.CandidateID)
 	}
 	reply.Term = rf.currentTerm
 }
