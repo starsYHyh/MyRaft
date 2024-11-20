@@ -614,7 +614,6 @@ func TestBackup2B(t *testing.T) {
 
 	// now everyone
 	for i := 0; i < servers; i++ {
-		cfg.connect(i)
 		DPrintf(dLog2, "F%d reconnected", i)
 	}
 	cfg.one(rand.Int(), servers, true)
@@ -738,6 +737,7 @@ func TestPersist12C(t *testing.T) {
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
+	DPrintf(dTest, "Test Persist12C: basic persistence")
 	cfg.begin("Test (2C): basic persistence")
 
 	cfg.one(11, servers, true)

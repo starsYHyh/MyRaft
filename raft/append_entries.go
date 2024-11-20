@@ -79,16 +79,36 @@ func (rf *Raft) entriesToAll() {
 				if !ok {
 					appendCtrl.appendCh = nil
 				} else if success {
+					// 如果存在一个 N 使得 N > commitIndex，且大多数 matchIndex[i] ≥ N，并且 log[N].term == currentTerm：设置 commitIndex = N
+					// var N int
+					// rf.mu.Lock()
+					// for N = len(rf.log) - 1; N > rf.commitIndex; N-- {
+					// 	count := 0
+					// 	for j := range rf.peers {
+					// 		if rf.matchIndex[j] >= N {
+					// 			count++
+					// 		}
+					// 	}
+					// 	if count > len(rf.peers)/2 && rf.log[N].Term == rf.currentTerm {
+					// 		rf.commitIndex = N
+					// 		DPrintf(dCommit, "L%d commit success to %d\n", rf.me, rf.commitIndex)
+					// 		rf.applyCondSignal()
+					// 		break
+					// 	}
+					// }
+					// rf.mu.Unlock()
+
 					appendCtrl.appendCount++
 				}
+
 				if appendCtrl.appendCount > len(rf.peers)/2 {
 					rf.mu.Lock()
 					preCommitIndex := rf.commitIndex
 					rf.commitIndex = rf.recvdIndex
 					if preCommitIndex != rf.commitIndex {
 						DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d\n", rf.me, preCommitIndex, rf.commitIndex)
+						rf.applyCondSignal()
 					}
-					rf.applyCondSignal()
 					rf.mu.Unlock()
 					return
 				}
@@ -164,11 +184,6 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	return ok
 }
 
-// 向所有服务器发送心跳，心跳需要包含其他服务器所缺少的日志，否则每次只能等到下次客户端请求时才能发送日志
-func (rf *Raft) heartBeat() {
-	rf.entriesToAll()
-}
-
 // 处理附加日志条目的RPC请求
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
@@ -197,7 +212,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 如果日志在 prevLogIndex 处不匹配，则返回 false
 	if args.PrevLogIndex > rf.recvdIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 		if args.PrevLogIndex <= rf.recvdIndex {
-			DPrintf(dInfo, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
+			DPrintf(dDrop, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
 			// 找到冲突条目的任期和该任期中它存储的第一个索引
 			reply.ConnflictTerm = rf.log[args.PrevLogIndex].Term
 			for i := args.PrevLogIndex; i >= 0; i-- {
@@ -207,12 +222,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				}
 			}
 		} else {
-			DPrintf(dInfo, "F%d MISMATCH lastIndex is %d but prevlogindex is %d\n", me, rf.recvdIndex, args.PrevLogIndex)
+			DPrintf(dDrop, "F%d MISMATCH lastIndex is %d but prevlogindex is %d\n", me, rf.recvdIndex, args.PrevLogIndex)
 			reply.ConnflictTerm = rf.currentTerm
 			reply.ConnflictIndex = rf.recvdIndex + 1
 		}
 
-		DPrintf(dDrop, "F%d change nextIndex from %d to %d\n", me, args.PrevLogIndex+1, reply.ConnflictIndex)
+		DPrintf(dInfo, "F%d update nextIndex from %d to %d\n", me, args.PrevLogIndex+1, reply.ConnflictIndex)
 		reply.Conflict = true // 说明日志不匹配
 		reply.Term = rf.currentTerm
 		return
@@ -227,7 +242,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
-		DPrintf(dCommit, "F%d update commitIndex to min(%d, %d)\n", me, args.LeaderCommit, len(rf.log)-1)
+		DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
 		rf.applyCondSignal()
 	}
 
