@@ -608,12 +608,12 @@ func TestBackup2B(t *testing.T) {
 	// lots of successful commands to new group.
 	DPrintf(dError, "lots of successful commands to new group")
 	for i := 0; i < commandCount; i++ {
-		DPrintf(dTest, "loop i=%v", i)
 		cfg.one(rand.Int(), 3, true)
 	}
 
 	// now everyone
 	for i := 0; i < servers; i++ {
+		cfg.connect(i)
 		DPrintf(dLog2, "F%d reconnected", i)
 	}
 	cfg.one(rand.Int(), servers, true)

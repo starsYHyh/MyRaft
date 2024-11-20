@@ -80,9 +80,9 @@ func (rf *Raft) entriesToAll() {
 					appendCtrl.appendCh = nil
 				} else if success {
 					// 如果存在一个 N 使得 N > commitIndex，且大多数 matchIndex[i] ≥ N，并且 log[N].term == currentTerm：设置 commitIndex = N
-					// var N int
+					// 但是实际上此效果比下面的要慢很多
 					// rf.mu.Lock()
-					// for N = len(rf.log) - 1; N > rf.commitIndex; N-- {
+					// for N := len(rf.log) - 1; N > rf.commitIndex; N-- {
 					// 	count := 0
 					// 	for j := range rf.peers {
 					// 		if rf.matchIndex[j] >= N {
@@ -93,14 +93,13 @@ func (rf *Raft) entriesToAll() {
 					// 		rf.commitIndex = N
 					// 		DPrintf(dCommit, "L%d commit success to %d\n", rf.me, rf.commitIndex)
 					// 		rf.applyCondSignal()
-					// 		break
+					// 		break // 找到合适的提交点后退出循环
 					// 	}
 					// }
 					// rf.mu.Unlock()
 
 					appendCtrl.appendCount++
 				}
-
 				if appendCtrl.appendCount > len(rf.peers)/2 {
 					rf.mu.Lock()
 					preCommitIndex := rf.commitIndex
@@ -206,6 +205,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	if rf.state == Candidate {
 		rf.state = Follower
+		DPrintf(dState, "F%d become follower\n", me)
 	}
 
 	rf.updateTime = time.Now()
