@@ -534,10 +534,12 @@ func TestRejoin2B(t *testing.T) {
 	cfg.end()
 }
 
-func ForTestBackup2B(t *testing.T) {
+func TestBackup2B(t *testing.T) {
 	servers := 5
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
+
+	commandCount := 50
 
 	DPrintf(dTest, "Test Backup: leader backs up quickly over incorrect follower logs")
 	cfg.begin("Test (2B): leader backs up quickly over incorrect follower logs")
@@ -552,7 +554,8 @@ func ForTestBackup2B(t *testing.T) {
 	DPrintf(dLog, "L%d, F%d, F%d, F%d disconnected", leader1, (leader1+2)%servers, (leader1+3)%servers, (leader1+4)%servers)
 
 	// submit lots of commands that won't commit
-	for i := 0; i < 50; i++ {
+	DPrintf(dError, "submit lots of commands that won't commit")
+	for i := 0; i < commandCount; i++ {
 		cfg.rafts[leader1].Start(rand.Int())
 	}
 
@@ -569,7 +572,8 @@ func ForTestBackup2B(t *testing.T) {
 	DPrintf(dLog2, "F%d, F%d, F%d reconnected", (leader1+2)%servers, (leader1+3)%servers, (leader1+4)%servers)
 
 	// lots of successful commands to new group.
-	for i := 0; i < 50; i++ {
+	DPrintf(dError, "lots of successful commands to new group")
+	for i := 0; i < commandCount; i++ {
 		cfg.one(rand.Int(), 3, true)
 	}
 
@@ -583,7 +587,8 @@ func ForTestBackup2B(t *testing.T) {
 	DPrintf(dLog, "F%d disconnected", other)
 
 	// lots more commands that won't commit
-	for i := 0; i < 50; i++ {
+	DPrintf(dError, "lots more commands that won't commit")
+	for i := 0; i < commandCount; i++ {
 		cfg.rafts[leader2].Start(rand.Int())
 	}
 
@@ -600,7 +605,8 @@ func ForTestBackup2B(t *testing.T) {
 	DPrintf(dLog2, "L%d, F%d, F%d reconnected", (leader1+0)%servers, (leader1+1)%servers, other)
 
 	// lots of successful commands to new group.
-	for i := 0; i < 50; i++ {
+	DPrintf(dError, "lots of successful commands to new group")
+	for i := 0; i < commandCount; i++ {
 		DPrintf(dTest, "loop i=%v", i)
 		cfg.one(rand.Int(), 3, true)
 	}
