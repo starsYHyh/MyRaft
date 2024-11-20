@@ -104,6 +104,12 @@ func (rf *Raft) voteToSingle(server int, args *RequestVoteArgs, voteCtrl *VoteCo
 
 	if rf.sendRequestVote(server, args, &reply) {
 		rf.mu.Lock()
+		// 如果当前任期已经改变或者不是候选人状态，则不再处理
+		if rf.currentTerm != args.Term || rf.state != Candidate {
+			rf.mu.Unlock()
+			voteCtrl.voteCh <- false
+			return
+		}
 		if reply.Term > rf.currentTerm {
 			rf.setNewTerm(reply.Term)
 			rf.updateTime = time.Now()
@@ -163,7 +169,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.persist()
 	} else {
 		reply.VoteGranted = false
-		DPrintf(dVote, "F%d refuse vote for C%d because of already have leader\n", rf.me, args.CandidateID)
+		if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
+			DPrintf(dVote, "F%d refuse vote for C%d because of already have leader\n", rf.me, args.CandidateID)
+		}
 	}
 	reply.Term = rf.currentTerm
 }

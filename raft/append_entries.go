@@ -150,6 +150,12 @@ func (rf *Raft) entriesToSingle(server int, appendCtrl *AppendController) {
 	reply := AppendEntriesReply{}
 	if rf.sendAppendEntries(server, &args, &reply) {
 		rf.mu.Lock()
+		// 需要判断当前任期是否已经过期，因为在发送RPC请求的过程中，本服务器可能已经不是leader了
+		if rf.currentTerm != args.Term || rf.state != Leader {
+			rf.mu.Unlock()
+			appendCtrl.appendCh <- false
+			return
+		}
 		if reply.Term > rf.currentTerm {
 			rf.setNewTerm(reply.Term)
 			rf.mu.Unlock()
