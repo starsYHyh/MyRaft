@@ -20,28 +20,27 @@ type AppendController struct {
 	appendCount   int              // 用于记录已经append成功的数量
 	appendCh      chan bool        // 用于通知RPC请求完成
 	timeout       <-chan time.Time // 用于超时控制
+	term          int              // 用于记录发出请求时的任期
 }
 
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	me := rf.me
 	if rf.state != Leader {
-		rf.mu.Unlock()
 		return 0, 0, false
 	}
 
-	curTerm, _ := rf.GetState()
+	curTerm := rf.currentTerm
 	rf.log = append(rf.log, LogEntry{Term: curTerm, Command: command})
 	rf.recvdIndex++
 	recvdIndex := rf.recvdIndex
 	rf.nextIndex[me] = recvdIndex + 1
 	rf.matchIndex[me] = recvdIndex
-	DPrintf(dClient, "L%d received command\n", me)
-	rf.mu.Unlock()
+	DPrintf(dClient, "L%d received command %v [%d]\n", me, command, curTerm)
 
 	// 发送当前日志到所有服务器，防止在发送日志的过程中，又接收到了新的日志
 	rf.entriesToAll()
-
 	return recvdIndex, curTerm, true
 }
 
@@ -49,7 +48,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 // 参数为调用前接收到的最大日志索引和当前任期
 // 防止在发送日志的过程中，又接收到了新的日志，导致发送的日志为新的日志
 func (rf *Raft) entriesToAll() {
-	rf.mu.Lock()
 	term := rf.currentTerm
 	appendCtrl := AppendController{
 		wg:            sync.WaitGroup{},
@@ -57,12 +55,33 @@ func (rf *Raft) entriesToAll() {
 		receivedCount: 1,
 		appendCh:      make(chan bool, len(rf.peers)-1),
 		timeout:       time.After(rf.heartBeatTime),
+		term:          term,
 	}
 
 	for i := range rf.peers {
 		if i != rf.me {
 			appendCtrl.wg.Add(1)
-			go rf.entriesToSingle(i, &appendCtrl)
+			var logEntry []LogEntry
+			if rf.nextIndex[i] > rf.recvdIndex {
+				// 代表为心跳包
+				logEntry = nil
+			} else {
+				// 代表为日志包
+				logEntry = rf.log[rf.nextIndex[i]:]
+			}
+			prevLogIndex := rf.nextIndex[i] - 1
+			// DPrintf(dLeader, "L%d send entry %v and commitIndex %d and prevLogIndex %d to F%d\n", rf.me, logEntry, rf.commitIndex, prevLogIndex, server)
+
+			args := AppendEntriesArgs{
+				Term:         rf.currentTerm,
+				LeaderID:     rf.me,
+				PrevLogIndex: prevLogIndex,
+				PrevLogTerm:  rf.log[prevLogIndex].Term,
+				Entries:      logEntry,
+				LeaderCommit: rf.commitIndex,
+			}
+			// DPrintf(dLeader, "L%d send entry %v and commitIndex %d and prevLogIndex %d to F%d\n", rf.me, logEntry, rf.commitIndex, prevLogIndex, i)
+			go rf.entriesToSingle(i, &args, &appendCtrl)
 		}
 	}
 
@@ -70,13 +89,51 @@ func (rf *Raft) entriesToAll() {
 		appendCtrl.wg.Wait()
 		close(appendCtrl.appendCh)
 	}()
-	rf.mu.Unlock()
+	go rf.waitAppendReply(&appendCtrl, term)
+}
 
+func (rf *Raft) entriesToSingle(server int, args *AppendEntriesArgs, appendCtrl *AppendController) {
+	defer appendCtrl.wg.Done()
+	reply := AppendEntriesReply{}
+
+	if rf.sendAppendEntries(server, args, &reply) {
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
+		// 需要判断当前任期是否已经过期，因为在发送RPC请求的过程中，本服务器可能已经不是leader了
+		if reply.Term > rf.currentTerm {
+			rf.setNewTerm(reply.Term)
+			return
+		}
+		if rf.currentTerm == args.Term {
+			if reply.Success {
+				// 有时候可能会连续重复发送相同的日志，导致nextIndex不断增加，所以需要取最小值
+				rf.nextIndex[server] = min(rf.recvdIndex+1, rf.nextIndex[server]+len(args.Entries))
+				rf.matchIndex[server] = rf.nextIndex[server] - 1
+				appendCtrl.appendCh <- true
+				return
+			} else if reply.Conflict {
+				rf.nextIndex[server] = reply.ConnflictIndex
+			} else if rf.nextIndex[server] > 1 {
+				rf.nextIndex[server]--
+			}
+			appendCtrl.appendCh <- false
+		}
+		return
+	} else {
+		// 如果是因为网络原因导致的失败，则等下次心跳或append时再次尝试
+		appendCtrl.appendCh <- false
+	}
+}
+
+func (rf *Raft) waitAppendReply(appendCtrl *AppendController, term int) {
 	for {
-		if rf.state == Leader {
+		curTerm, isLeader := rf.GetState()
+		if curTerm == term && isLeader {
 			select {
 			case success, ok := <-appendCtrl.appendCh:
+				rf.mu.Lock()
 				if rf.currentTerm != term || rf.state != Leader {
+					rf.mu.Unlock()
 					return
 				}
 				appendCtrl.receivedCount++
@@ -105,7 +162,6 @@ func (rf *Raft) entriesToAll() {
 					appendCtrl.appendCount++
 				}
 				if appendCtrl.appendCount > len(rf.peers)/2 {
-					rf.mu.Lock()
 					preCommitIndex := rf.commitIndex
 					rf.commitIndex = rf.recvdIndex
 					if preCommitIndex != rf.commitIndex {
@@ -115,69 +171,13 @@ func (rf *Raft) entriesToAll() {
 					rf.mu.Unlock()
 					return
 				}
-				if appendCtrl.receivedCount == len(rf.peers) {
-					return
-				}
+				rf.mu.Unlock()
 			case <-appendCtrl.timeout:
 				return
 			}
 		} else {
 			return
 		}
-	}
-}
-
-func (rf *Raft) entriesToSingle(server int, appendCtrl *AppendController) {
-	defer appendCtrl.wg.Done()
-
-	rf.mu.Lock()
-	var logEntry []LogEntry
-	if rf.nextIndex[server] > rf.recvdIndex {
-		// 代表为心跳包
-		logEntry = nil
-	} else {
-		// 代表为日志包
-		logEntry = rf.log[rf.nextIndex[server]:]
-	}
-	prevLogIndex := rf.nextIndex[server] - 1
-	// DPrintf(dLeader, "L%d send entry %v and commitIndex %d and prevLogIndex %d to F%d\n", rf.me, logEntry, rf.commitIndex, prevLogIndex, server)
-
-	args := AppendEntriesArgs{
-		Term:         rf.currentTerm,
-		LeaderID:     rf.me,
-		PrevLogIndex: prevLogIndex,
-		PrevLogTerm:  rf.log[prevLogIndex].Term,
-		Entries:      logEntry,
-		LeaderCommit: rf.commitIndex,
-	}
-	rf.mu.Unlock()
-	reply := AppendEntriesReply{}
-	if rf.sendAppendEntries(server, &args, &reply) {
-		rf.mu.Lock()
-		// 需要判断当前任期是否已经过期，因为在发送RPC请求的过程中，本服务器可能已经不是leader了
-		if reply.Term > rf.currentTerm {
-			rf.setNewTerm(reply.Term)
-			rf.mu.Unlock()
-			return
-		}
-		if reply.Success {
-			// 有时候可能会连续重复发送相同的日志，导致nextIndex不断增加，所以需要取最小值
-			rf.nextIndex[server] = min(rf.recvdIndex+1, rf.nextIndex[server]+len(logEntry))
-			rf.matchIndex[server] = rf.nextIndex[server] - 1
-			rf.mu.Unlock()
-			appendCtrl.appendCh <- true
-		} else if reply.Conflict {
-			appendCtrl.appendCh <- false
-			rf.nextIndex[server] = reply.ConnflictIndex
-			rf.mu.Unlock()
-		} else {
-			rf.mu.Unlock()
-			appendCtrl.appendCh <- false
-		}
-		return
-	} else {
-		// 如果是因为网络原因导致的失败，则等下次心跳或append时再次尝试
-		appendCtrl.appendCh <- false
 	}
 }
 
@@ -196,15 +196,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	me := rf.me
 	reply.Success = false
 	reply.Conflict = false
+	reply.Term = rf.currentTerm
 	if args.Term > rf.currentTerm {
 		rf.setNewTerm(args.Term)
-		reply.Term = args.Term
+		// reply.Term = args.Term
 		return
 	}
 
 	// append entries rpc 1
 	if args.Term < rf.currentTerm {
-		reply.Term = rf.currentTerm
+		// reply.Term = rf.currentTerm
 		return
 	}
 
@@ -241,12 +242,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 如果一个已经存在的条目和新条目在相同的索引位置有相同的任期号和索引值，则复制其后的所有条目
 	rf.log = rf.log[:args.PrevLogIndex+1]
 	rf.log = append(rf.log, args.Entries...)
-	// DPrintf(dInfo, "F%d update entry to %v [%d]\n", me, rf.log, rf.currentTerm)
 	rf.recvdIndex = len(rf.log) - 1
 
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
-		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
+		DPrintf(dInfo, "F%d update entry to %v [%d]\n", me, rf.log, rf.currentTerm)
+		rf.commitIndex = min(args.LeaderCommit, rf.recvdIndex)
 		DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
 		rf.applyCondSignal()
 	}
@@ -266,20 +267,43 @@ func (rf *Raft) applyLog() {
 	// 而应用的意思是将这个日志条目应用到本地状态机上，例如，实际更改数据库中的value，将这个操作执行
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	// for !rf.killed() {
+	// 	if rf.commitIndex > rf.lastApplied {
+	// 		DPrintf(dInfo, "S%d log is %v\n", rf.me, rf.log)
+	// 		DPrintf(dPersist, "S%d apply log from %d to %d\n", rf.me, rf.lastApplied+1, rf.commitIndex)
+	// 		// 将日志应用到状态机
+	// 		for i := rf.lastApplied + 1; i <= rf.commitIndex && i <= rf.recvdIndex; i++ {
+	// 			command := rf.log[i].Command
+	// 			rf.mu.Unlock()
+	// 			rf.applyCh <- ApplyMsg{
+	// 				CommandValid: true,
+	// 				Command:      command,
+	// 				CommandIndex: i,
+	// 			}
+	// 			rf.mu.Lock()
+	// 		}
+	// 		rf.lastApplied = rf.commitIndex
+	// 	} else {
+	// 		// rf.applyCond.Wait() 调用了 c.L.Unlock() 来释放锁，然后进入等待状态。
+	// 		// 当条件满足时，线程会被唤醒并重新获取锁（通过 c.L.Lock()），然后继续执行。
+	// 		rf.applyCond.Wait()
+	// 	}
+	// }
+
 	for !rf.killed() {
-		if rf.commitIndex > rf.lastApplied {
-			// 将日志应用到状态机
-			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
-				rf.applyCh <- ApplyMsg{
-					CommandValid: true,
-					Command:      rf.log[i].Command,
-					CommandIndex: i,
-				}
+		if rf.commitIndex > rf.lastApplied && len(rf.log)-1 > rf.lastApplied {
+			DPrintf(dInfo, "S%d log is %v\n", rf.me, rf.log)
+			// DPrintf(dPersist, "S%d apply log from %d to %d\n", rf.me, rf.lastApplied+1, rf.commitIndex)
+			rf.lastApplied++
+			applyMsg := ApplyMsg{
+				CommandValid: true,
+				Command:      rf.log[rf.lastApplied].Command,
+				CommandIndex: rf.lastApplied,
 			}
-			rf.lastApplied = rf.commitIndex
+			rf.mu.Unlock()
+			rf.applyCh <- applyMsg
+			rf.mu.Lock()
 		} else {
-			// rf.applyCond.Wait() 调用了 c.L.Unlock() 来释放锁，然后进入等待状态。
-			// 当条件满足时，线程会被唤醒并重新获取锁（通过 c.L.Lock()），然后继续执行。
 			rf.applyCond.Wait()
 		}
 	}

@@ -94,8 +94,10 @@ type Raft struct {
 
 // 返回当前任期和该服务器是否认为自己是领导者
 func (rf *Raft) GetState() (int, bool) {
+	rf.mu.Lock()
 	term := rf.currentTerm
 	isleader := rf.state == Leader
+	rf.mu.Unlock()
 	return term, isleader
 }
 
@@ -137,7 +139,7 @@ func (rf *Raft) readPersist(data []byte) {
 // 重置更新时间、随机化选举超时时间
 func (rf *Raft) resetTime() {
 	rf.updateTime = time.Now()
-	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
+	rf.electionTimeout = time.Duration(150+rand.Intn(150)) * time.Millisecond
 }
 
 // 服务想要切换到快照。只有在Raft没有更多最近的信息时才这样做，因为它在applyCh上通信快照。
@@ -221,6 +223,7 @@ func (rf *Raft) ticker() {
 	for !rf.killed() {
 		// 无论是何种状态，都先休眠heartBeatTime时间
 		time.Sleep(rf.heartBeatTime)
+		rf.mu.Lock()
 		// 如果是领导者，则每过一个heartbeat时间发送一次心跳
 		if rf.state == Leader {
 			rf.entriesToAll()
@@ -228,9 +231,10 @@ func (rf *Raft) ticker() {
 
 		// 如果是跟随者，则检测距离上次收到心跳的时间是否超过了选举超时时间
 		// 如果超过了，则启动新选举
-		if rf.state == Follower && time.Since(rf.updateTime) > rf.electionTimeout {
+		if (rf.state == Follower || rf.state == Candidate) && time.Since(rf.updateTime) > rf.electionTimeout {
 			rf.leaderElection()
 		}
+		rf.mu.Unlock()
 	}
 }
 
@@ -250,8 +254,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// Your initialization code here (2A, 2B, 2C).
 	rf.state = Follower
-	rf.heartBeatTime = 120 * time.Millisecond                                 // 心跳时间，因测试要求每秒不多于10次/秒
-	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond // 选举超时时间，大于论文中的300ms
+	rf.heartBeatTime = 50 * time.Millisecond                                  // 心跳时间，因测试要求每秒不多于10次/秒
+	rf.electionTimeout = time.Duration(150+rand.Intn(150)) * time.Millisecond // 选举超时时间，大于论文中的300ms
 	rf.updateTime = time.Now()
 	rf.currentTerm = 0           // 任期号
 	rf.votedFor = -1             // 未投票
