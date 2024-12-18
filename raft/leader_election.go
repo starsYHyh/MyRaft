@@ -12,10 +12,10 @@ type VoteController struct {
 	voteCount     int              // 用于记录已经投票成功的数量
 	voteCh        chan bool        // 用于通知RPC请求完成
 	timeout       <-chan time.Time // 用于超时控制
+	term          int              // 用于记录发出请求时的任期
 }
 
 func (rf *Raft) leaderElection() {
-	rf.mu.Lock()
 	me := rf.me
 	rf.currentTerm++
 	rf.votedFor = me
@@ -28,7 +28,7 @@ func (rf *Raft) leaderElection() {
 		LastLogIndex: rf.recvdIndex,
 		LastLogTerm:  rf.log[rf.recvdIndex].Term,
 	}
-	DPrintf(dVote, "C%d start election, term is %d", me, rf.currentTerm)
+	DPrintf(dVote, "C%d start election, term is %d and electiontime is %v\n", me, rf.currentTerm, rf.electionTimeout.Milliseconds())
 
 	voteCtrl := VoteController{
 		wg:            sync.WaitGroup{},
@@ -36,6 +36,7 @@ func (rf *Raft) leaderElection() {
 		receivedCount: 1,
 		voteCh:        make(chan bool, len(rf.peers)-1),
 		timeout:       time.After(rf.electionTimeout),
+		term:          rf.currentTerm,
 	}
 
 	for i := range rf.peers {
@@ -50,13 +51,43 @@ func (rf *Raft) leaderElection() {
 		close(voteCtrl.voteCh)
 	}()
 
-	rf.mu.Unlock()
+	go rf.waitVoteReply(&voteCtrl, &args)
+}
 
+func (rf *Raft) voteToSingle(server int, args *RequestVoteArgs, voteCtrl *VoteController) {
+	defer voteCtrl.wg.Done()
+	reply := RequestVoteReply{}
+
+	DPrintf(dVote, "C%d send vote ", rf.me)
+	if rf.sendRequestVote(server, args, &reply) {
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
+		// 如果当前任期已经改变或者不是候选人状态，则不再处理
+		if reply.Term > voteCtrl.term {
+			rf.setNewTerm(reply.Term)
+			rf.resetTime()
+			rf.updateTime = time.Now()
+			voteCtrl.voteCh <- false
+			return
+		}
+		voteCtrl.voteCh <- reply.VoteGranted
+	} else {
+		voteCtrl.voteCh <- false
+	}
+}
+
+func (rf *Raft) waitVoteReply(voteCtrl *VoteController, args *RequestVoteArgs) {
 	for {
-		if rf.state == Candidate {
+		rf.mu.Lock()
+		state, curTerm := rf.state, rf.currentTerm
+		rf.mu.Unlock()
+		if state == Candidate && curTerm == args.Term {
 			select {
 			case voteGranted, ok := <-voteCtrl.voteCh:
-				if rf.currentTerm != args.Term || rf.state != Candidate {
+				rf.mu.Lock()
+
+				if rf.currentTerm != voteCtrl.term || rf.state != Candidate {
+					rf.mu.Unlock()
 					return
 				}
 				voteCtrl.receivedCount++
@@ -67,7 +98,6 @@ func (rf *Raft) leaderElection() {
 				}
 
 				if voteCtrl.voteCount > len(rf.peers)/2 {
-					rf.mu.Lock()
 					rf.state = Leader
 					for i := range rf.nextIndex {
 						rf.nextIndex[i] = rf.recvdIndex + 1
@@ -75,53 +105,35 @@ func (rf *Raft) leaderElection() {
 					}
 
 					rf.recvdIndex = len(rf.log) - 1
-					rf.mu.Unlock()
 
-					DPrintf(dState, "C%d become leader\n", me)
+					DPrintf(dState, "C%d become leader\n", rf.me)
 					rf.entriesToAll()
-					return
-				}
-				if voteCtrl.receivedCount == len(rf.peers) {
-					rf.mu.Lock()
-					rf.setNewTerm(rf.currentTerm)
-					rf.resetTime()
 					rf.mu.Unlock()
 					return
 				}
+				// 下面可能会增加系统的复杂性，所以暂时不考虑
+				// if voteCtrl.receivedCount == len(rf.peers) {
+				// 	rf.setNewTerm(rf.currentTerm)
+				// 	rf.resetTime()
+				// 	rf.mu.Unlock()
+				// 	return
+				// }
+				rf.mu.Unlock()
 			case <-voteCtrl.timeout:
-				if rf.currentTerm != args.Term || rf.state != Candidate {
+				rf.mu.Lock()
+				if rf.currentTerm != voteCtrl.term || rf.state != Candidate {
+					rf.mu.Unlock()
 					return
 				}
-				rf.mu.Lock()
 				rf.setNewTerm(rf.currentTerm)
 				rf.resetTime()
+				DPrintf(dInfo, "F%d electionTimeout is %v\n", rf.me, rf.electionTimeout)
 				rf.mu.Unlock()
 				return
 			}
 		} else {
 			return
 		}
-	}
-}
-
-func (rf *Raft) voteToSingle(server int, args *RequestVoteArgs, voteCtrl *VoteController) {
-	defer voteCtrl.wg.Done()
-	reply := RequestVoteReply{}
-
-	if rf.sendRequestVote(server, args, &reply) {
-		rf.mu.Lock()
-		// 如果当前任期已经改变或者不是候选人状态，则不再处理
-		if reply.Term > rf.currentTerm {
-			rf.setNewTerm(reply.Term)
-			rf.updateTime = time.Now()
-			rf.mu.Unlock()
-			return
-		}
-		rf.mu.Unlock()
-
-		voteCtrl.voteCh <- reply.VoteGranted
-	} else {
-		voteCtrl.voteCh <- false
 	}
 }
 
@@ -148,7 +160,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	// DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
+	DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
 	if args.Term > rf.currentTerm {
 		rf.setNewTerm(args.Term)
 	}
@@ -166,12 +178,14 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
 		rf.updateTime = time.Now()
-		DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
+		DPrintf(dVote, "F%d vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n", rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
+		// DPrintf(dVote, "F%d vote for %d\n", rf.me, args.CandidateID)
 		rf.persist()
 	} else {
 		reply.VoteGranted = false
 		if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
-			DPrintf(dVote, "F%d refuse vote for C%d because of already have leader\n", rf.me, args.CandidateID)
+			DPrintf(dVote, "F%d refuse vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n", rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
+			// DPrintf(dVote, "F%d refuse vote for C%d because of conflict logterm or ilogndex\n", rf.me, args.CandidateID)
 		}
 	}
 	reply.Term = rf.currentTerm

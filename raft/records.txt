@@ -1,0 +1,96 @@
+11-21-21:26
+➜  raft git:(main) ✗ zsh ./dstest.sh
+Running with the race detector
+
+Failed test TestFailNoAgree2B - .run/TestFailNoAgree2B_74.log
+Failed test TestFailNoAgree2B - .run/TestFailNoAgree2B_284.log
+Failed test TestCount2B - .run/TestCount2B_458.log
+Failed test TestCount2B - .run/TestCount2B_598.log
+Failed test TestConcurrentStarts2B - .run/TestConcurrentStarts2B_772.log
+Failed test TestCount2B - .run/TestCount2B_827.log
+Failed test TestCount2B - .run/TestCount2B_842.log
+Failed test TestCount2B - .run/TestCount2B_918.log
+Failed test TestCount2B - .run/TestCount2B_1107.log
+Failed test TestBackup2B - .run/TestBackup2B_1235.log
+Failed test TestBackup2B - .run/TestBackup2B_1383.log
+Failed test TestCount2B - .run/TestCount2B_1475.log
+Failed test TestBackup2B - .run/TestBackup2B_1533.log
+Failed test TestCount2B - .run/TestCount2B_1659.log
+Failed test TestCount2B - .run/TestCount2B_1672.log
+Failed test TestFailNoAgree2B - .run/TestFailNoAgree2B_1710.log
+Failed test TestFailNoAgree2B - .run/TestFailNoAgree2B_1728.log
+Failed test TestCount2B - .run/TestCount2B_1744.log
+Failed test TestCount2B - .run/TestCount2B_1791.log
+Failed test TestCount2B - .run/TestCount2B_1811.log
+Failed test TestCount2B - .run/TestCount2B_1873.log
+Failed test TestCount2B - .run/TestCount2B_1892.log
+Failed test TestRejoin2B - .run/TestRejoin2B_2034.log
+Failed test TestCount2B - .run/TestCount2B_2081.log
+Failed test TestCount2B - .run/TestCount2B_2256.log
+Failed test TestCount2B - .run/TestCount2B_2294.log
+Failed test TestCount2B - .run/TestCount2B_2331.log
+Failed test TestCount2B - .run/TestCount2B_2421.log
+Failed test TestConcurrentStarts2B - .run/TestConcurrentStarts2B_2440.log
+Failed test TestCount2B - .run/TestCount2B_2443.log
+Failed test TestFailNoAgree2B - .run/TestFailNoAgree2B_2606.log
+Failed test TestCount2B - .run/TestCount2B_2671.log
+Failed test TestBackup2B - .run/TestBackup2B_2766.log
+Failed test TestCount2B - .run/TestCount2B_2799.log
+Failed test TestCount2B - .run/TestCount2B_2957.log
+Failed test TestCount2B - .run/TestCount2B_3034.log
+Failed test TestConcurrentStarts2B - .run/TestConcurrentStarts2B_3064.log
+Failed test TestFailNoAgree2B - .run/TestFailNoAgree2B_3172.log
+Failed test TestCount2B - .run/TestCount2B_3358.log
+Failed test TestCount2B - .run/TestCount2B_3370.log
+Failed test TestCount2B - .run/TestCount2B_3487.log
+Failed test TestFailNoAgree2B - .run/TestFailNoAgree2B_3526.log
+Failed test TestCount2B - .run/TestCount2B_3539.log
+Failed test TestConcurrentStarts2B - .run/TestConcurrentStarts2B_3622.log
+Failed test TestConcurrentStarts2B - .run/TestConcurrentStarts2B_3640.log
+Failed test TestConcurrentStarts2B - .run/TestConcurrentStarts2B_3671.log
+Failed test TestConcurrentStarts2B - .run/TestConcurrentStarts2B_3858.log
+Failed test TestFailNoAgree2B - .run/TestFailNoAgree2B_4110.log
+Failed test TestFailNoAgree2B - .run/TestFailNoAgree2B_4211.log
+Failed test TestCount2B - .run/TestCount2B_4532.log
+Failed test TestCount2B - .run/TestCount2B_4557.log
+Failed test TestRejoin2B - .run/TestRejoin2B_4623.log
+Failed test TestBackup2B - .run/TestBackup2B_4700.log
+Failed test TestCount2B - .run/TestCount2B_4730.log
+Failed test TestCount2B - .run/TestCount2B_4885.log
+Failed test TestCount2B - .run/TestCount2B_4990.log
+Failed test TestCount2B - .run/TestCount2B_5017.log
+Failed test TestCount2B - .run/TestCount2B_5029.log
+Failed test TestBackup2B - .run/TestBackup2B_5232.log
+Failed test TestBackup2B - .run/TestBackup2B_5765.log
+Failed test TestCount2B - .run/TestCount2B_5917.log
+Failed test TestConcurrentStarts2B - .run/TestConcurrentStarts2B_6034.log
+Failed test TestFailNoAgree2B - .run/TestFailNoAgree2B_6204.log
+Failed test TestBackup2B - .run/TestBackup2B_6280.log
+Failed test TestCount2B - .run/TestCount2B_6632.log
+Failed test TestConcurrentStarts2B - .run/TestConcurrentStarts2B_6640.log
+Failed test TestBackup2B - .run/TestBackup2B_6757.log
+Failed test TestCount2B - .run/TestCount2B_6779.log
+Failed test TestCount2B - .run/TestCount2B_6948.log
+Failed test TestBackup2B - .run/TestBackup2B_7265.log
+Failed test TestCount2B - .run/TestCount2B_7337.log
+Failed test TestCount2B - .run/TestCount2B_7357.log
+Failed test TestCount2B - .run/TestCount2B_7684.log
+Failed test TestCount2B - .run/TestCount2B_7708.log
+Failed test TestCount2B - .run/TestCount2B_7775.log
+Failed test TestCount2B - .run/TestCount2B_7798.log
+Failed test TestCount2B - .run/TestCount2B_7997.log
+Failed test TestCount2B - .run/TestCount2B_7998.log
+Failed test TestCount2B - .run/TestCount2B_7999.log
+┏━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ Test                   ┃ Failed ┃ Total ┃         Time ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━┩
+│ TestBasicAgree2B       │      0 │  1000 │  2.10 ± 0.22 │
+│ TestRPCBytes2B         │      0 │  1000 │  2.52 ± 0.25 │
+│ TestFailAgree2B        │      0 │  1000 │  4.86 ± 0.28 │
+│ TestFailNoAgree2B      │     10 │  1000 │  5.11 ± 0.31 │
+│ TestConcurrentStarts2B │      9 │  1000 │  2.55 ± 2.85 │
+│ TestRejoin2B           │      2 │  1000 │  6.68 ± 1.09 │
+│ TestBackup2B           │     10 │  1000 │ 12.48 ± 1.13 │
+│ TestCount2B            │     48 │  1000 │  5.24 ± 6.21 │
+└────────────────────────┴────────┴───────┴──────────────┘
+➜  raft git:(main) ✗                                                                                                                                                                             
