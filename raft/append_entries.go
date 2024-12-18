@@ -21,6 +21,8 @@ type AppendController struct {
 	appendCh      chan bool        // 用于通知RPC请求完成
 	timeout       <-chan time.Time // 用于超时控制
 	term          int              // 用于记录发出请求时的任期
+	recvdIndex    int              // 用于记录当前接收到的最大日志索引
+	commitIndex   int              // 用于记录当前已经提交的最大日志索引
 }
 
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
@@ -56,6 +58,8 @@ func (rf *Raft) entriesToAll() {
 		appendCh:      make(chan bool, len(rf.peers)-1),
 		timeout:       time.After(rf.heartBeatTime),
 		term:          term,
+		recvdIndex:    rf.recvdIndex,
+		commitIndex:   rf.commitIndex,
 	}
 
 	for i := range rf.peers {
@@ -164,8 +168,8 @@ func (rf *Raft) waitAppendReply(appendCtrl *AppendController, term int) {
 				}
 				if appendCtrl.appendCount > len(rf.peers)/2 {
 					// 因为在等待日志提交的过程中，可能有新的日志被leader接受，所以实际上commitIndex应当是旧的recvdIndex
-					preCommitIndex := rf.commitIndex
-					rf.commitIndex = rf.recvdIndex
+					preCommitIndex := appendCtrl.commitIndex
+					rf.commitIndex = appendCtrl.recvdIndex
 					if preCommitIndex != rf.commitIndex {
 						DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d, appendCount is %d\n", rf.me, preCommitIndex, rf.commitIndex, appendCtrl.appendCount)
 						rf.applyCondSignal()
