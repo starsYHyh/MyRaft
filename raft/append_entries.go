@@ -39,7 +39,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	recvdIndex := rf.recvdIndex
 	rf.nextIndex[me] = recvdIndex + 1
 	rf.matchIndex[me] = recvdIndex
-	DPrintf(dClient, "L%d received command %v [%d]\n", me, command, curTerm)
+	// DPrintf(dClient, "L%d received command %v [%d]\n", me, command, curTerm)
 
 	// 发送当前日志到所有服务器，防止在发送日志的过程中，又接收到了新的日志
 	rf.entriesToAll()
@@ -113,7 +113,6 @@ func (rf *Raft) entriesToSingle(server int, args *AppendEntriesArgs, appendCtrl 
 				// 有时候可能会连续重复发送相同的日志，导致nextIndex不断增加，所以需要取最小值
 				rf.nextIndex[server] = min(rf.recvdIndex+1, rf.nextIndex[server]+len(args.Entries))
 				rf.matchIndex[server] = rf.nextIndex[server] - 1
-				DPrintf(dInfo, "L%d F%d append success, nextIndex is %d, matchIndex is %d\n", rf.me, server, rf.nextIndex[server], rf.matchIndex[server])
 				appendCtrl.appendCh <- true
 				return
 			} else if reply.Conflict {
@@ -250,11 +249,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.log = append(rf.log, args.Entries...)
 	rf.recvdIndex = len(rf.log) - 1
 
-	DPrintf(dClient, "F%d received entry %v [%d]\n", me, args.Entries, rf.currentTerm)
+	// DPrintf(dClient, "F%d received entry %v [%d]\n", me, args.Entries, rf.currentTerm)
 
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
-		DPrintf(dInfo, "F%d update entry to %v [%d]\n", me, rf.log, rf.currentTerm)
 		rf.commitIndex = min(args.LeaderCommit, rf.recvdIndex)
 		DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
 		rf.applyCondSignal()
@@ -300,8 +298,7 @@ func (rf *Raft) applyLog() {
 
 	for !rf.killed() {
 		if rf.commitIndex > rf.lastApplied && len(rf.log)-1 > rf.lastApplied {
-			DPrintf(dInfo, "S%d log is %v\n", rf.me, rf.log)
-			// DPrintf(dPersist, "S%d apply log from %d to %d\n", rf.me, rf.lastApplied+1, rf.commitIndex)
+			// DPrintf(dInfo, "S%d log is %v\n", rf.me, rf.log)
 			rf.lastApplied++
 			applyMsg := ApplyMsg{
 				CommandValid: true,
