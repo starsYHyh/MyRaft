@@ -109,10 +109,11 @@ func (rf *Raft) entriesToSingle(server int, args *AppendEntriesArgs, appendCtrl 
 				// 有时候可能会连续重复发送相同的日志，导致nextIndex不断增加，所以需要取最小值
 				rf.nextIndex[server] = min(rf.recvdIndex+1, rf.nextIndex[server]+len(args.Entries))
 				rf.matchIndex[server] = rf.nextIndex[server] - 1
+				DPrintf(dInfo, "L%d F%d append success, nextIndex is %d, matchIndex is %d\n", rf.me, server, rf.nextIndex[server], rf.matchIndex[server])
 				appendCtrl.appendCh <- true
 				return
 			} else if reply.Conflict {
-				rf.nextIndex[server] = reply.ConnflictIndex
+				rf.nextIndex[server] = reply.XIndex
 			} else if rf.nextIndex[server] > 1 {
 				rf.nextIndex[server]--
 			}
@@ -162,10 +163,11 @@ func (rf *Raft) waitAppendReply(appendCtrl *AppendController, term int) {
 					appendCtrl.appendCount++
 				}
 				if appendCtrl.appendCount > len(rf.peers)/2 {
+					// 因为在等待日志提交的过程中，可能有新的日志被leader接受，所以实际上commitIndex应当是旧的recvdIndex
 					preCommitIndex := rf.commitIndex
 					rf.commitIndex = rf.recvdIndex
 					if preCommitIndex != rf.commitIndex {
-						DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d\n", rf.me, preCommitIndex, rf.commitIndex)
+						DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d, appendCount is %d\n", rf.me, preCommitIndex, rf.commitIndex, appendCtrl.appendCount)
 						rf.applyCondSignal()
 					}
 					rf.mu.Unlock()
@@ -220,20 +222,20 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if args.PrevLogIndex <= rf.recvdIndex {
 			DPrintf(dDrop, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
 			// 找到冲突条目的任期和该任期中它存储的第一个索引
-			reply.ConnflictTerm = rf.log[args.PrevLogIndex].Term
+			reply.XTerm = rf.log[args.PrevLogIndex].Term
 			for i := args.PrevLogIndex; i >= 0; i-- {
-				if rf.log[i].Term != reply.ConnflictTerm {
-					reply.ConnflictIndex = i + 1
+				if rf.log[i].Term != reply.XTerm {
+					reply.XIndex = i + 1
 					break
 				}
 			}
 		} else {
 			DPrintf(dDrop, "F%d MISMATCH lastIndex is %d but prevlogindex is %d\n", me, rf.recvdIndex, args.PrevLogIndex)
-			reply.ConnflictTerm = rf.currentTerm
-			reply.ConnflictIndex = rf.recvdIndex + 1
+			reply.XTerm = rf.currentTerm
+			reply.XIndex = rf.recvdIndex + 1
 		}
 
-		DPrintf(dInfo, "F%d update nextIndex from %d to %d\n", me, args.PrevLogIndex+1, reply.ConnflictIndex)
+		DPrintf(dInfo, "F%d update nextIndex from %d to %d\n", me, args.PrevLogIndex+1, reply.XIndex)
 		reply.Conflict = true // 说明日志不匹配
 		reply.Term = rf.currentTerm
 		return
@@ -243,6 +245,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.log = rf.log[:args.PrevLogIndex+1]
 	rf.log = append(rf.log, args.Entries...)
 	rf.recvdIndex = len(rf.log) - 1
+
+	DPrintf(dClient, "F%d received entry %v [%d]\n", me, args.Entries, rf.currentTerm)
 
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {

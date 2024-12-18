@@ -185,11 +185,12 @@ type AppendEntriesArgs struct {
 }
 
 type AppendEntriesReply struct {
-	Term           int  // currentTerm，用于领导者自我更新
-	Success        bool // 如果跟随者包含与 prevLogIndex 和 prevLogTerm 匹配的条目，则为 true
-	Conflict       bool // 如果跟随者包含与 prevLogIndex 和 prevLogTerm 不匹配的条目，则为 true
-	ConnflictTerm  int  // 冲突条目的任期
-	ConnflictIndex int  // 该任期中存储的第一个索引
+	Term     int  // currentTerm，用于领导者自我更新
+	Success  bool // 如果跟随者包含与 prevLogIndex 和 prevLogTerm 匹配的条目，则为 true
+	Conflict bool // 如果跟随者包含与 prevLogIndex 和 prevLogTerm 不匹配的条目，则为 true
+	XTerm    int  // 冲突条目的任期
+	XIndex   int  // 该任期中存储的第一个索引
+	XLen     int  // 跟随者的日志长度
 }
 
 // 测试人员在每次测试后不会停止Raft创建的goroutine，但它确实调用了Kill()方法。
