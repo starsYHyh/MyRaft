@@ -78,18 +78,16 @@ type Raft struct {
 	recvdIndex  int        // 已知收到的最后一个日志条目的索引，即为日志长度-1，（初始化为 0，单调增加）
 
 	// 所有服务器上的易失性状态
-
-	state           int           // 服务器的状态（跟随者、候选人、领导者）
 	commitIndex     int           // 已知已提交的最高日志条目的索引（初始化为 0，单调增加）
 	lastApplied     int           // 应用于状态机的最高日志条目的索引（初始化为 0，单调增加）
+	state           int           // 服务器的状态（跟随者、候选人、领导者）
 	updateTime      time.Time     // 上次收到心跳的时间，或开始选举的时间
 	electionTimeout time.Duration // 选举超时时间
 
 	// 领导者服务器上的易失状态（选举后重新初始化）
-
 	nextIndex     []int         // 对于每个服务器，发送到该服务器的下一个日志条目的索引（初始化为领导者最后一个日志索引 + 1）
 	matchIndex    []int         // 对于每个服务器，已知在服务器上复制的最高日志条目的索引（初始化为 0，单调增加）
-	heartBeatTime time.Duration // 心跳时间
+	heartBeatTime time.Duration // 心跳超时时间
 }
 
 // 返回当前任期和该服务器是否认为自己是领导者
@@ -139,7 +137,7 @@ func (rf *Raft) readPersist(data []byte) {
 // 重置更新时间、随机化选举超时时间
 func (rf *Raft) resetTime() {
 	rf.updateTime = time.Now()
-	rf.electionTimeout = time.Duration(150+rand.Intn(150)) * time.Millisecond
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
 }
 
 // 服务想要切换到快照。只有在Raft没有更多最近的信息时才这样做，因为它在applyCh上通信快照。
@@ -216,10 +214,9 @@ func (rf *Raft) setNewTerm(term int) {
 	rf.persist()
 }
 
-// ticker goroutine在此对等方最近没有收到心跳时启动新选举。
 // 在ticker中，需要处理两件事
-// 1. 如果最近选举超时时间内没有收到心跳，则启动新选举
-// 2. 如果是领导者，则发送心跳
+// 1. 如果是领导者，则发送心跳
+// 2. 如果最近选举超时时间内没有收到心跳，则启动新选举
 func (rf *Raft) ticker() {
 	for !rf.killed() {
 		// 无论是何种状态，都先休眠heartBeatTime时间
@@ -253,10 +250,12 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 
-	// Your initialization code here (2A, 2B, 2C).
+	// 初始化状态
 	rf.state = Follower
-	rf.heartBeatTime = 50 * time.Millisecond                                  // 心跳时间，因测试要求每秒不多于10次/秒
-	rf.electionTimeout = time.Duration(150+rand.Intn(150)) * time.Millisecond // 选举超时时间，大于论文中的300ms
+	// 心跳时间，因测试要求每秒不多于10次/秒
+	// 选举超时时间，大于论文中的300ms，且需要随机化
+	rf.heartBeatTime = 120 * time.Millisecond
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
 	rf.updateTime = time.Now()
 	rf.currentTerm = 0           // 任期号
 	rf.votedFor = -1             // 未投票
@@ -273,9 +272,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	rf.readPersist(persister.ReadRaftState())
 
-	go rf.ticker()
-
-	go rf.applyLog()
-
+	go rf.ticker()   // 开辟一个goroutine，用于处理心跳和选举
+	go rf.applyLog() // 开辟一个goroutine，用于应用日志
 	return rf
 }
