@@ -7,21 +7,21 @@ import (
 
 type VoteController struct {
 	// 用于控制投票的RPC请求
-	wg            sync.WaitGroup   // 用于等待所有的RPC请求完成
-	receivedCount int              // 用于记录已经接收到的数量
-	voteCount     int              // 用于记录已经投票成功的数量
-	voteCh        chan bool        // 用于通知RPC请求完成
-	timeout       <-chan time.Time // 用于超时控制
-	term          int              // 用于记录发出请求时的任期
+	wg        sync.WaitGroup   // 用于等待所有的RPC请求完成
+	voteCount int              // 用于记录已经投票成功的数量
+	voteCh    chan bool        // 用于通知RPC请求完成
+	timeout   <-chan time.Time // 用于超时控制
+	term      int              // 用于记录发出请求时的任期
 }
 
 func (rf *Raft) leaderElection() {
+	// 设置当前节点为自己选举的候选人，并增加任期编号
 	me := rf.me
 	rf.currentTerm++
 	rf.votedFor = me
 	rf.state = Candidate
-	rf.resetTime()
-
+	rf.resetTime() // 重置选举超时计时器
+	// 生成RequestVote RPC参数
 	args := RequestVoteArgs{
 		Term:         rf.currentTerm, // 当前任期
 		CandidateID:  me,
@@ -29,28 +29,27 @@ func (rf *Raft) leaderElection() {
 		LastLogTerm:  rf.log[rf.recvdIndex].Term,
 	}
 	DPrintf(dVote, "C%d start election, term is %d and electiontime is %v\n", me, rf.currentTerm, rf.electionTimeout.Milliseconds())
-
+	// 初始化投票控制结构
 	voteCtrl := VoteController{
-		wg:            sync.WaitGroup{},
-		voteCount:     1,
-		receivedCount: 1,
-		voteCh:        make(chan bool, len(rf.peers)-1),
-		timeout:       time.After(rf.electionTimeout),
-		term:          rf.currentTerm,
+		wg:        sync.WaitGroup{},
+		voteCount: 1,
+		voteCh:    make(chan bool, len(rf.peers)-1),
+		timeout:   time.After(rf.electionTimeout),
+		term:      rf.currentTerm,
 	}
-
+	// 向其他服务器发送RequestVote RPC
 	for i := range rf.peers {
 		if i != me {
 			voteCtrl.wg.Add(1)
 			go rf.voteToSingle(i, &args, &voteCtrl)
 		}
 	}
-
+	// 开辟一个goroutine，等待所有投票线程完成
 	go func() {
 		voteCtrl.wg.Wait()
 		close(voteCtrl.voteCh)
 	}()
-
+	// 开辟一个goroutine，处理投票回复
 	go rf.waitVoteReply(&voteCtrl, &args)
 }
 
@@ -90,7 +89,6 @@ func (rf *Raft) waitVoteReply(voteCtrl *VoteController, args *RequestVoteArgs) {
 					rf.mu.Unlock()
 					return
 				}
-				voteCtrl.receivedCount++
 				if !ok {
 					voteCtrl.voteCh = nil
 				} else if voteGranted {
