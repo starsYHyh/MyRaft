@@ -15,14 +15,13 @@ import (
 // 第三个返回值是如果此服务器认为自己是领导者，则为true。
 type AppendController struct {
 	// 用于控制附加日志条目的RPC请求
-	wg            sync.WaitGroup   // 用于等待所有的RPC请求完成
-	receivedCount int              // 用于记录已经接收到的数量
-	appendCount   int              // 用于记录已经append成功的数量
-	appendCh      chan bool        // 用于通知RPC请求完成
-	timeout       <-chan time.Time // 用于超时控制
-	term          int              // 用于记录发出请求时的任期
-	recvdIndex    int              // 用于记录当前接收到的最大日志索引
-	commitIndex   int              // 用于记录当前已经提交的最大日志索引
+	wg          sync.WaitGroup   // 用于等待所有的RPC请求完成
+	appendCount int              // 用于记录已经append成功的数量
+	appendCh    chan bool        // 用于通知RPC请求完成
+	timeout     <-chan time.Time // 用于超时控制
+	term        int              // 用于记录发出请求时的任期
+	recvdIndex  int              // 用于记录当前接收到的最大日志索引
+	commitIndex int              // 用于记录当前已经提交的最大日志索引
 }
 
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
@@ -32,7 +31,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	if rf.state != Leader {
 		return 0, 0, false
 	}
-
+	//
 	curTerm := rf.currentTerm
 	rf.log = append(rf.log, LogEntry{Term: curTerm, Command: command})
 	rf.recvdIndex++
@@ -47,30 +46,27 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 }
 
 // 结合heartbeat和start，向所有服务器发送缺少的日志
-// 参数为调用前接收到的最大日志索引和当前任期
-// 防止在发送日志的过程中，又接收到了新的日志，导致发送的日志为新的日志
 func (rf *Raft) entriesToAll() {
 	term := rf.currentTerm
 	appendCtrl := AppendController{
-		wg:            sync.WaitGroup{},
-		appendCount:   1,
-		receivedCount: 1,
-		appendCh:      make(chan bool, len(rf.peers)-1),
-		timeout:       time.After(rf.heartBeatTime),
-		term:          term,
-		recvdIndex:    rf.recvdIndex,
-		commitIndex:   rf.commitIndex,
+		wg:          sync.WaitGroup{},
+		appendCount: 1,
+		appendCh:    make(chan bool, len(rf.peers)-1),
+		timeout:     time.After(rf.heartBeatTime),
+		term:        term,
+		recvdIndex:  rf.recvdIndex,
+		commitIndex: rf.commitIndex,
 	}
 
 	for i := range rf.peers {
 		if i != rf.me {
 			appendCtrl.wg.Add(1)
 			var logEntry []LogEntry
+			// 如果nextIndex[i] > recvdIndex
+			// 则说明认为对方的日志已经是最新的了，所以不需要发送日志
 			if rf.nextIndex[i] > rf.recvdIndex {
-				// 代表为心跳包
 				logEntry = nil
 			} else {
-				// 代表为日志包
 				logEntry = rf.log[rf.nextIndex[i]:]
 			}
 			prevLogIndex := rf.nextIndex[i] - 1
@@ -114,15 +110,11 @@ func (rf *Raft) entriesToSingle(server int, args *AppendEntriesArgs, appendCtrl 
 				rf.nextIndex[server] = min(rf.recvdIndex+1, rf.nextIndex[server]+len(args.Entries))
 				rf.matchIndex[server] = rf.nextIndex[server] - 1
 				appendCtrl.appendCh <- true
-				return
-			} else if reply.Conflict {
+			} else {
 				rf.nextIndex[server] = reply.XIndex
-			} else if rf.nextIndex[server] > 1 {
-				rf.nextIndex[server]--
+				appendCtrl.appendCh <- false
 			}
-			appendCtrl.appendCh <- false
 		}
-		return
 	} else {
 		// 如果是因为网络原因导致的失败，则等下次心跳或append时再次尝试
 		appendCtrl.appendCh <- false
@@ -140,7 +132,6 @@ func (rf *Raft) waitAppendReply(appendCtrl *AppendController, term int) {
 					rf.mu.Unlock()
 					return
 				}
-				appendCtrl.receivedCount++
 				if !ok {
 					appendCtrl.appendCh = nil
 				} else if success {
@@ -200,22 +191,22 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 解决term冲突
 	me := rf.me
 	reply.Success = false
-	reply.Conflict = false
 	reply.Term = rf.currentTerm
 	if args.Term > rf.currentTerm {
+		// 将自己转换为follower，并且将voteFor设置为leaderID
+		// 此处处理与其他不同，因为在其他地方收到的请求发出者不一定是leader
+		// 但是在这里，收到的请求发出者一定是leader，因为只有leader才会发送附加日志条目的RPC请求
 		rf.setNewTerm(args.Term)
-		// reply.Term = args.Term
-		return
+		rf.votedFor = args.LeaderID
 	}
 
-	// append entries rpc 1
 	if args.Term < rf.currentTerm {
-		// reply.Term = rf.currentTerm
 		return
 	}
 
 	if rf.state == Candidate {
 		rf.state = Follower
+		rf.votedFor = args.LeaderID
 		DPrintf(dState, "F%d become follower\n", me)
 	}
 
@@ -239,7 +230,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		}
 
 		DPrintf(dInfo, "F%d update nextIndex from %d to %d\n", me, args.PrevLogIndex+1, reply.XIndex)
-		reply.Conflict = true // 说明日志不匹配
 		reply.Term = rf.currentTerm
 		return
 	}
@@ -260,7 +250,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	reply.Term = rf.currentTerm
 	reply.Success = true
-	reply.Conflict = false
 }
 
 func (rf *Raft) applyCondSignal() {
