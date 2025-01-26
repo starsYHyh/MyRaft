@@ -1,4 +1,3 @@
 #!/usr/bin/zsh
 
-for i in {1..10} 
-    go test -run 2A | dslogs -i INFO
+cat test_test.go| grep "2A" | sed 's/(/ /g'|awk '/func/ {printf "%s ",$2;}' | xargs dstest -o .1224_2 -n 100 -p 50 -r
