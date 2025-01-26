@@ -124,6 +124,7 @@ func (rf *Raft) readPersist(data []byte) {
 	var log []LogEntry
 	if d.Decode(&currentTerm) != nil || d.Decode(&votedFor) != nil || d.Decode(&log) != nil {
 		// error handling
+		DPrintf(dError, "readPersist error\n")
 	} else {
 		rf.mu.Lock()
 		defer rf.mu.Unlock()
@@ -203,9 +204,9 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
-func (rf *Raft) setNewTerm(term int) {
+func (rf *Raft) setNewTerm(term int, voteFor int) {
 	rf.currentTerm = term
-	rf.votedFor = -1
+	rf.votedFor = voteFor
 	rf.state = Follower
 	// DPrintf(dState, "F%d become follower\n", rf.me)
 	rf.persist()
@@ -247,18 +248,22 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 
+	// // 如果日志为空，则初始化一个空的日志，索引从1开始
+	// if len(rf.log) == 0 {
+	// 	rf.log = append(rf.log, LogEntry{0, nil})
+	// }
+	// // 如果currentTerm为0，则说明是第一次启动，将currentTerm设置为1
+	// if rf.currentTerm == 0 {
+	// 	rf.votedFor = -1
+	// }
+
+	rf.log = make([]LogEntry, 1)
+	rf.currentTerm = 0
+	rf.votedFor = -1
+
 	rf.readPersist(persister.ReadRaftState())
 
 	DPrintf(dState, "F%d currentTerm is %d, votedFor is %d, log is %v\n", rf.me, rf.currentTerm, rf.votedFor, rf.log)
-
-	// 如果日志为空，则初始化一个空的日志，索引从1开始
-	if len(rf.log) == 0 {
-		rf.log = append(rf.log, LogEntry{0, nil})
-	}
-	// 如果currentTerm为0，则说明是第一次启动，将currentTerm设置为1
-	if rf.currentTerm == 0 {
-		rf.votedFor = -1
-	}
 
 	// 初始化状态
 	rf.state = Follower

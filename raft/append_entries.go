@@ -34,6 +34,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	//
 	curTerm := rf.currentTerm
 	rf.log = append(rf.log, LogEntry{Term: curTerm, Command: command})
+	rf.persist()
 	rf.recvdIndex++
 	recvdIndex := rf.recvdIndex
 	rf.nextIndex[me] = recvdIndex + 1
@@ -98,7 +99,7 @@ func (rf *Raft) entriesToSingle(server int, args *AppendEntriesArgs, appendCtrl 
 		defer rf.mu.Unlock()
 		// 需要判断当前任期是否已经过期，因为在发送RPC请求的过程中，本服务器可能已经不是leader了
 		if reply.Term > rf.currentTerm {
-			rf.setNewTerm(reply.Term)
+			rf.setNewTerm(reply.Term, rf.votedFor)
 			return
 		}
 		if rf.currentTerm == args.Term {
@@ -185,8 +186,6 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	rf.persist()
-	defer rf.persist()
 	// 解决term冲突
 
 	me := rf.me
@@ -196,8 +195,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		// 将自己转换为follower，并且将voteFor设置为leaderID
 		// 此处处理与其他不同，因为在其他地方收到的请求发出者不一定是leader
 		// 但是在这里，收到的请求发出者一定是leader，因为只有leader才会发送附加日志条目的RPC请求
-		rf.setNewTerm(args.Term)
-		rf.votedFor = args.LeaderID
+		rf.setNewTerm(args.Term, args.LeaderID)
 	}
 
 	if args.Term < rf.currentTerm {
@@ -236,6 +234,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 如果一个已经存在的条目和新条目在相同的索引位置有相同的任期号和索引值，则复制其后的所有条目
 	rf.log = rf.log[:args.PrevLogIndex+1]
 	rf.log = append(rf.log, args.Entries...)
+	rf.persist()
 	rf.recvdIndex = len(rf.log) - 1
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
