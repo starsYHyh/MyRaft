@@ -64,7 +64,7 @@ func (rf *Raft) voteToSingle(server int, args *RequestVoteArgs, voteCtrl *VoteCo
 		defer rf.mu.Unlock()
 		// 如果回复的任期大于当前任期，则更新当前任期
 		if reply.Term > rf.currentTerm {
-			rf.setNewTerm(reply.Term, rf.votedFor)
+			rf.setNewTerm(reply.Term, -1)
 			rf.resetTime()
 			rf.updateTime = time.Now()
 			voteCtrl.voteCh <- false
@@ -125,7 +125,7 @@ func (rf *Raft) waitVoteReply(voteCtrl *VoteController) {
 					rf.mu.Unlock()
 					return
 				}
-				rf.setNewTerm(rf.currentTerm, rf.votedFor)
+				rf.setNewTerm(rf.currentTerm, -1)
 				rf.resetTime()
 				rf.mu.Unlock()
 				return
@@ -162,12 +162,12 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
-		DPrintf(dVote, "F%d refuse vote for C%d because of term\n", rf.me, args.CandidateID)
+		// DPrintf(dVote, "F%d refuse vote for C%d because of term\n", rf.me, args.CandidateID)
 		return
 	}
 	// 如果请求的任期大于当前任期
 	if args.Term > rf.currentTerm {
-		rf.setNewTerm(args.Term, rf.votedFor)
+		rf.setNewTerm(args.Term, -1)
 	}
 
 	if (rf.votedFor == -1 || rf.votedFor == args.CandidateID) &&
@@ -178,14 +178,14 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
 		rf.persist()
+		// DPrintf(dVote, "F%d vote for C%d because lastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, lastLogIndex is %d, rf.recvdIndex is %d\n",
+		// 	rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
 		rf.updateTime = time.Now()
 	} else {
 		reply.VoteGranted = false
 		if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
-			DPrintf(dVote, "F%d refuse vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n",
-				rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
-		} else {
-			DPrintf(dVote, "F%d refuse vote for C%d because of votedFor is %d\n", rf.me, args.CandidateID, rf.votedFor)
+			// DPrintf(dVote, "F%d refuse vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n",
+			// 	rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
 		}
 	}
 	reply.Term = rf.currentTerm

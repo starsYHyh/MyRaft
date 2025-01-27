@@ -99,7 +99,7 @@ func (rf *Raft) entriesToSingle(server int, args *AppendEntriesArgs, appendCtrl 
 		defer rf.mu.Unlock()
 		// 需要判断当前任期是否已经过期，因为在发送RPC请求的过程中，本服务器可能已经不是leader了
 		if reply.Term > rf.currentTerm {
-			rf.setNewTerm(reply.Term, rf.votedFor)
+			rf.setNewTerm(reply.Term, -1)
 			return
 		}
 		if rf.currentTerm == args.Term {
@@ -159,7 +159,8 @@ func (rf *Raft) waitAppendReply(appendCtrl *AppendController, term int) {
 					preCommitIndex := appendCtrl.commitIndex
 					rf.commitIndex = appendCtrl.recvdIndex
 					if preCommitIndex != rf.commitIndex {
-						DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d, appendCount is %d\n", rf.me, preCommitIndex, rf.commitIndex, appendCtrl.appendCount)
+						DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d\n", rf.me, preCommitIndex, rf.commitIndex)
+						// DPrintf(dCommit, "L%d log is %v\n", rf.me, rf.log)
 						rf.applyCondSignal()
 					}
 					rf.mu.Unlock()
@@ -239,7 +240,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommit, rf.recvdIndex)
+		// DPrintf(dCommit, "F%d update commitIndex to %d, and log is %v\n", me, rf.commitIndex, rf.log)
 		DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
+
 		rf.applyCondSignal()
 	}
 

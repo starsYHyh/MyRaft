@@ -1,25 +1,5 @@
 package raft
 
-//
-// this is an outline of the API that raft must expose to
-// the service (or tester). see comments below for
-// each of these functions for more details.
-//
-// rf = Make(...)
-//   create a new Raft server.
-//   创造一个新的Raft服务器
-// rf.Start(command interface{}) (index, term, isleader)
-//   start agreement on a new log entry
-//   开始对新的日志条目达成一致
-// rf.GetState() (term, isLeader)
-//   ask a Raft for its current term, and whether it thinks it is leader
-//   询问Raft当前的任期，以及它是否认为自己是领导者
-// type ApplyMsg
-//   each time a new entry is committed to the log, each Raft peer
-//   should send an ApplyMsg to the service (or tester)
-//   in the same server.
-//	 每次有新的条目被提交到日志中，每个Raft对等方都应该向服务（或测试人员）发送一个ApplyMsg
-
 import (
 	"MyRaft/labgob"
 	"MyRaft/labrpc"
@@ -59,7 +39,6 @@ const (
 	Leader           // 领导者
 )
 
-// A Go object implementing a single Raft peer.
 type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
 	peers     []*labrpc.ClientEnd // RPC end points of all peers
@@ -99,8 +78,6 @@ func (rf *Raft) GetState() (int, bool) {
 	return term, isleader
 }
 
-// 将Raft的持久状态保存到稳定存储中，以便在崩溃和重新启动后可以检索。
-// 保存的状态包括当前任期号和已投票的候选者ID以及日志条目。
 func (rf *Raft) persist() {
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
@@ -189,11 +166,6 @@ type AppendEntriesReply struct {
 	XLen    int  // 跟随者的日志长度
 }
 
-// 测试人员在每次测试后不会停止Raft创建的goroutine，但它确实调用了Kill()方法。
-// 您的代码可以使用killed()来检查是否已调用Kill()。使用原子操作避免了锁的需要。
-//
-// 问题是长时间运行的goroutine使用内存，可能会消耗CPU时间，可能导致后续测试失败并生成令人困惑的调试输出。
-// 任何具有长时间运行循环的goroutine都应调用killed()来检查它是否应该停止。
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
@@ -234,13 +206,6 @@ func (rf *Raft) ticker() {
 	}
 }
 
-// 服务或测试人员想要创建一个Raft服务器。所有Raft服务器（包括这个）的端口都在peers[]中。
-// 该服务器的端口是peers[me]。所有服务器的peers[]数组的顺序相同。
-// persister是这个服务器保存其持久状态的地方，如果有的话，它最初保存了最近保存的状态。
-//
-// applyCh是测试人员或服务期望Raft发送ApplyMsg消息的通道。
-//
-// Make()必须快速返回，因此它应该为任何长时间运行的工作启动goroutine。
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := &Raft{}
@@ -248,22 +213,14 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 
-	// // 如果日志为空，则初始化一个空的日志，索引从1开始
-	// if len(rf.log) == 0 {
-	// 	rf.log = append(rf.log, LogEntry{0, nil})
-	// }
-	// // 如果currentTerm为0，则说明是第一次启动，将currentTerm设置为1
-	// if rf.currentTerm == 0 {
-	// 	rf.votedFor = -1
-	// }
-
 	rf.log = make([]LogEntry, 1)
 	rf.currentTerm = 0
 	rf.votedFor = -1
 
 	rf.readPersist(persister.ReadRaftState())
 
-	DPrintf(dState, "F%d currentTerm is %d, votedFor is %d, log is %v\n", rf.me, rf.currentTerm, rf.votedFor, rf.log)
+	// DPrintf(dState, "F%d currentTerm is %d, votedFor is %d, log is %v\n", rf.me, rf.currentTerm, rf.votedFor, rf.log)
+	DPrintf(dState, "F%d currentTerm is %d, votedFor is %d\n", rf.me, rf.currentTerm, rf.votedFor)
 
 	// 初始化状态
 	rf.state = Follower
@@ -273,8 +230,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
 	rf.updateTime = time.Now()
 
-	rf.commitIndex = 0 // 已知已提交的最高日志条目的索引
-	rf.recvdIndex = 0  // 已知收到的最后一个日志条目的索引
+	rf.commitIndex = 0              // 已知已提交的最高日志条目的索引
+	rf.recvdIndex = len(rf.log) - 1 // 已知收到的最后一个日志条目的索引
 
 	rf.nextIndex = make([]int, len(rf.peers))
 	rf.matchIndex = make([]int, len(rf.peers))
