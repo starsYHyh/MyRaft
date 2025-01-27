@@ -1,0 +1,31 @@
+000000 STAT F0 currentTerm is 0, votedFor is -1
+000001 STAT F1 currentTerm is 0, votedFor is -1
+000002 STAT F2 currentTerm is 0, votedFor is -1
+000002 STAT F3 currentTerm is 0, votedFor is -1
+000002 STAT F4 currentTerm is 0, votedFor is -1
+Test (2C): Figure 8 ...
+000606 VOTE C0 start election, term is 1
+000606 VOTE C3 start election, term is 1
+000606 VOTE C4 start election, term is 1
+000608 STAT C0 become leader
+000609 CMIT L0 commit success, commitIndex from 0 to 1
+000630 INFO F2 update nextIndex from 2 to 1
+000630 INFO F4 update nextIndex from 2 to 1
+000630 INFO F3 update nextIndex from 2 to 1
+001209 VOTE C3 start election, term is 2
+001209 STAT C3 become leader
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+001931 VOTE C2 start election, term is 3
+001931 VOTE C1 start election, term is 3
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+002533 VOTE C2 start election, term is 4
+002535 STAT C2 become leader
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+002992 CMIT L2 commit success, commitIndex from 0 to 1
+2: log map[]; server map[1:5629316323174413392]
+apply error: commit index=1 server=2 977190241529412317 != server=0 5629316323174413392
+exit status 1
+FAIL	MyRaft/raft	3.003s

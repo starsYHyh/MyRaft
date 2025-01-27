@@ -136,9 +136,6 @@ func (rf *Raft) waitVoteReply(voteCtrl *VoteController) {
 	}
 }
 
-// 向服务器发送RequestVote RPC，期望arg中的RPC参数，用RPC回复填充*reply，因此调用者应传递&reply。
-// 传递给Call()的args和reply的类型必须与处理程序函数中声明的参数的类型相同（包括它们是否为指针）。
-//
 // labrpc包模拟了一个有丢失的网络，在这个网络中，服务器可能无法访问，请求和回复可能丢失。
 // Call()发送请求并等待回复。如果在超时间隔内收到回复，则Call()返回true；否则Call()返回false。因此，Call()可能一段时间不返回。
 // 一个false返回可能是由于死服务器、无法访问的活服务器、丢失的请求或丢失的回复。

@@ -222,7 +222,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				}
 			}
 		} else {
-			DPrintf(dDrop, "F%d MISMATCH lastIndex is %d but prevlogindex is %d\n", me, rf.recvdIndex, args.PrevLogIndex)
+			// DPrintf(dDrop, "F%d MISMATCH lastIndex is %d but prevlogindex is %d\n", me, rf.recvdIndex, args.PrevLogIndex)
 			reply.XTerm = rf.currentTerm
 			reply.XIndex = rf.recvdIndex + 1
 		}
