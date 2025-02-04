@@ -31,7 +31,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	if rf.state != Leader {
 		return 0, 0, false
 	}
-	//
 	curTerm := rf.currentTerm
 	rf.log = append(rf.log, LogEntry{Term: curTerm, Command: command})
 	rf.persist()
@@ -68,8 +67,14 @@ func (rf *Raft) entriesToAll() {
 				logEntry = nil
 			} else {
 				logEntry = rf.log[rf.nextIndex[i]:]
+				// 2D，需要判断是否需要发送快照：nextIndex[i] <= lastIncludedIndex
+				// 如果需要发送快照，则发送快照，然后发送日志，日志起点为log[1]
+				// 如果不需要发送快照，则发送日志，日志起点为log[nextIndex[i] - lastIncludedIndex]
 			}
 			prevLogIndex := rf.nextIndex[i] - 1
+			if prevLogIndex >= len(rf.log) {
+				DPrintf(dDrop, "L%d prevLogIndex %d is out of range, len(log) is %d\n", rf.me, prevLogIndex, len(rf.log))
+			}
 
 			args := AppendEntriesArgs{
 				Term:         rf.currentTerm,
@@ -133,25 +138,6 @@ func (rf *Raft) waitAppendReply(appendCtrl *AppendController, term int) {
 				if !ok {
 					appendCtrl.appendCh = nil
 				} else if success {
-					// 如果存在一个 N 使得 N > commitIndex，且大多数 matchIndex[i] ≥ N，并且 log[N].term == currentTerm：设置 commitIndex = N
-					// 但是实际上此效果比下面的要慢很多
-					// rf.mu.Lock()
-					// for N := len(rf.log) - 1; N > rf.commitIndex; N-- {
-					// 	count := 0
-					// 	for j := range rf.peers {
-					// 		if rf.matchIndex[j] >= N {
-					// 			count++
-					// 		}
-					// 	}
-					// 	if count > len(rf.peers)/2 && rf.log[N].Term == rf.currentTerm {
-					// 		rf.commitIndex = N
-					// 		DPrintf(dCommit, "L%d commit success to %d\n", rf.me, rf.commitIndex)
-					// 		rf.applyCondSignal()
-					// 		break // 找到合适的提交点后退出循环
-					// 	}
-					// }
-					// rf.mu.Unlock()
-
 					appendCtrl.appendCount++
 				}
 				if appendCtrl.appendCount > len(rf.peers)/2 {
@@ -260,29 +246,6 @@ func (rf *Raft) applyLog() {
 	// 而应用的意思是将这个日志条目应用到本地状态机上，例如，实际更改数据库中的value，将这个操作执行
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	// for !rf.killed() {
-	// 	if rf.commitIndex > rf.lastApplied {
-	// 		DPrintf(dInfo, "S%d log is %v\n", rf.me, rf.log)
-	// 		DPrintf(dPersist, "S%d apply log from %d to %d\n", rf.me, rf.lastApplied+1, rf.commitIndex)
-	// 		// 将日志应用到状态机
-	// 		for i := rf.lastApplied + 1; i <= rf.commitIndex && i <= rf.recvdIndex; i++ {
-	// 			command := rf.log[i].Command
-	// 			rf.mu.Unlock()
-	// 			rf.applyCh <- ApplyMsg{
-	// 				CommandValid: true,
-	// 				Command:      command,
-	// 				CommandIndex: i,
-	// 			}
-	// 			rf.mu.Lock()
-	// 		}
-	// 		rf.lastApplied = rf.commitIndex
-	// 	} else {
-	// 		// rf.applyCond.Wait() 调用了 c.L.Unlock() 来释放锁，然后进入等待状态。
-	// 		// 当条件满足时，线程会被唤醒并重新获取锁（通过 c.L.Lock()），然后继续执行。
-	// 		rf.applyCond.Wait()
-	// 	}
-	// }
-
 	for !rf.killed() {
 		if rf.commitIndex > rf.lastApplied && len(rf.log)-1 > rf.lastApplied {
 			rf.lastApplied++

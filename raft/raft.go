@@ -56,6 +56,11 @@ type Raft struct {
 	log         []LogEntry // 日志条目集；每个条目包含状态机命令以及领导者收到条目时的任期（第一个索引为 1）
 	recvdIndex  int        // 已知收到的最后一个日志条目的索引，即为日志长度-1，（初始化为 0，单调增加）
 
+	// 为了支持快照，需要持久化其他信息
+	lastIncludedIndex int    // 快照中包含的最后一个日志条目的索引
+	lastIncludedTerm  int    // 快照中包含的最后一个日志条目的任期
+	snapshot          []byte // 快照数据
+
 	// 所有服务器上的易失性状态
 	commitIndex     int           // 已知已提交的最高日志条目的索引（初始化为 0，单调增加）
 	lastApplied     int           // 应用于状态机的最高日志条目的索引（初始化为 0，单调增加）
@@ -91,7 +96,7 @@ func (rf *Raft) persist() {
 
 // 从持久化存储中恢复之前的状态
 func (rf *Raft) readPersist(data []byte) {
-	if data == nil || len(data) < 1 { // bootstrap without any state?
+	if data == nil || len(data) < 1 {
 		return
 	}
 	r := bytes.NewBuffer(data)
@@ -100,7 +105,6 @@ func (rf *Raft) readPersist(data []byte) {
 	var votedFor int
 	var log []LogEntry
 	if d.Decode(&currentTerm) != nil || d.Decode(&votedFor) != nil || d.Decode(&log) != nil {
-		// error handling
 		DPrintf(dError, "readPersist error\n")
 	} else {
 		rf.mu.Lock()
@@ -111,6 +115,45 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 }
 
+func (rf *Raft) persistWithSnapshot() {
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.log)
+	e.Encode(rf.lastIncludedIndex)
+	e.Encode(rf.lastIncludedTerm)
+
+	data := w.Bytes()
+	rf.persister.SaveStateAndSnapshot(data, rf.snapshot)
+}
+
+func (rf *Raft) readPersistWithSnapshot(data []byte, snapshot []byte) {
+	if data == nil || len(data) < 1 {
+		return
+	}
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var currentTerm int
+	var votedFor int
+	var log []LogEntry
+	var lastIncludedIndex int
+	var lastIncludedTerm int
+	if d.Decode(&currentTerm) != nil || d.Decode(&votedFor) != nil || d.Decode(&log) != nil ||
+		d.Decode(&lastIncludedIndex) != nil || d.Decode(&lastIncludedTerm) != nil {
+		DPrintf(dError, "readPersist error\n")
+	} else {
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
+		rf.currentTerm = currentTerm
+		rf.votedFor = votedFor
+		rf.log = log
+		rf.lastIncludedIndex = lastIncludedIndex
+		rf.lastIncludedTerm = lastIncludedTerm
+		rf.snapshot = snapshot
+	}
+}
+
 // 重置更新时间、随机化选举超时时间
 func (rf *Raft) resetTime() {
 	rf.updateTime = time.Now()
@@ -118,6 +161,8 @@ func (rf *Raft) resetTime() {
 }
 
 // 服务想要切换到快照。只有在Raft没有更多最近的信息时才这样做，因为它在applyCh上通信快照。
+// 以前，本实验建议您实现一个名为 CondInstallSnapshot 的函数，以避免协调在 applyCh 上发送的快照和日志条目的要求。
+// 这个残留的 API 接口仍然存在，但不鼓励您实现它：相反，我们建议您只需让它返回 true。
 func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
 
 	// Your code here (2D).
@@ -129,11 +174,30 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 // 这意味着服务不再需要日志通过（包括）该索引。Raft现在应该尽可能地修剪其日志。
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	// 如果快照的最后一个日志条目的索引大于等于当前接收的快照最后一个日志条目的索引，则不需要处理
+	// 因为已经进行了快照
+	if index <= rf.lastIncludedIndex || index > rf.commitIndex {
+		return
+	}
+	// 更新日志：截断
+	// 使用
+	snapshotLen := index - rf.lastIncludedIndex
+	newLastIncludedTerm := rf.log[snapshotLen].Term
+	newLastIncludedIndex := index
+	rf.log = append([]LogEntry{{Term: newLastIncludedTerm, Command: nil}}, rf.log[snapshotLen+1:]...)
+	rf.lastIncludedTerm = newLastIncludedTerm
+	rf.lastIncludedIndex = newLastIncludedIndex
+	rf.snapshot = snapshot
+	DPrintf(dSnap, "F%d snapshot index %d, lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, index, rf.lastIncludedIndex, rf.lastIncludedTerm)
+	rf.persistWithSnapshot()
+}
+
+func (rf *Raft) InstallSnapshot() {
 
 }
 
-// RequestVote RPC 参数结构
-// 字段名必须以大写字母开头！
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
 	Term         int // 候选者的任期号
@@ -142,8 +206,6 @@ type RequestVoteArgs struct {
 	LastLogTerm  int //	候选者最后一次日志条目的任期（§5.4）
 }
 
-// RequestVote RPC 回复结构
-// 字段名必须以大写字母开头！
 type RequestVoteReply struct {
 	Term        int  // currentTerm，供候选人自行更新
 	VoteGranted bool // true 表示候选人获得选票
@@ -164,6 +226,18 @@ type AppendEntriesReply struct {
 	XTerm   int  // 冲突条目的任期
 	XIndex  int  // 该任期中存储的第一个索引
 	XLen    int  // 跟随者的日志长度
+}
+
+type InstallSnapshotArgs struct {
+	Term              int    // 领导者的任期号
+	LeaderID          int    // 领导者的ID
+	LastIncludedIndex int    // 快照将替换该索引之前的所有条目（包括该索引）
+	LastIncludedTerm  int    // lastIncludedIndex的任期
+	Data              []byte // 快照数据
+}
+
+type InstallSnapshotReply struct {
+	Term int // currentTerm，用于领导者自我更新
 }
 
 func (rf *Raft) Kill() {
@@ -216,8 +290,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.log = make([]LogEntry, 1)
 	rf.currentTerm = 0
 	rf.votedFor = -1
+	rf.snapshot = make([]byte, 0)
 
 	rf.readPersist(persister.ReadRaftState())
+	// rf.readPersistWithSnapshot(persister.ReadRaftState(), persister.ReadSnapshot())
 
 	// DPrintf(dState, "F%d currentTerm is %d, votedFor is %d, log is %v\n", rf.me, rf.currentTerm, rf.votedFor, rf.log)
 	DPrintf(dState, "F%d currentTerm is %d, votedFor is %d\n", rf.me, rf.currentTerm, rf.votedFor)
