@@ -63,6 +63,8 @@ func (rf *Raft) entriesToAll() {
 			var logEntry []LogEntry
 			// 如果nextIndex[i] > recvdIndex
 			// 则说明认为对方的日志已经是最新的了，所以不需要发送日志
+			// 如果nextIndex[i] > recvdIndex
+			// 则说明认为对方的日志已经是最新的了，所以不需要发送日志
 			if rf.nextIndex[i] > rf.recvdIndex {
 				logEntry = nil
 			} else {
@@ -115,6 +117,7 @@ func (rf *Raft) entriesToSingle(server int, args *AppendEntriesArgs, appendCtrl 
 				appendCtrl.appendCh <- true
 			} else {
 				rf.nextIndex[server] = reply.XIndex
+				appendCtrl.appendCh <- false
 				appendCtrl.appendCh <- false
 			}
 		}

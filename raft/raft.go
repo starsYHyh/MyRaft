@@ -158,6 +158,7 @@ func (rf *Raft) readPersistWithSnapshot(data []byte, snapshot []byte) {
 func (rf *Raft) resetTime() {
 	rf.updateTime = time.Now()
 	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
 }
 
 // 服务想要切换到快照。只有在Raft没有更多最近的信息时才这样做，因为它在applyCh上通信快照。
@@ -261,6 +262,8 @@ func (rf *Raft) setNewTerm(term int, voteFor int) {
 // 在ticker中，需要处理两件事
 // 1. 如果是领导者，则发送心跳
 // 2. 如果最近选举超时时间内没有收到心跳，则启动新选举
+// 1. 如果是领导者，则发送心跳
+// 2. 如果最近选举超时时间内没有收到心跳，则启动新选举
 func (rf *Raft) ticker() {
 	for !rf.killed() {
 		// 无论是何种状态，都先休眠heartBeatTime时间
@@ -300,6 +303,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// 初始化状态
 	rf.state = Follower
+	// 心跳时间，因测试要求每秒不多于10次/秒
+	// 选举超时时间，大于论文中的300ms，且需要随机化
+	rf.heartBeatTime = 120 * time.Millisecond
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
 	// 心跳时间，因测试要求每秒不多于10次/秒
 	// 选举超时时间，大于论文中的300ms，且需要随机化
 	rf.heartBeatTime = 120 * time.Millisecond
