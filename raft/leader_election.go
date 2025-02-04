@@ -29,11 +29,7 @@ func (rf *Raft) leaderElection() {
 		LastLogIndex: rf.recvdIndex,
 		LastLogTerm:  rf.log[rf.recvdIndex].Term,
 	}
-<<<<<<< HEAD
 	DPrintf(dVote, "C%d start election, term is %d\n", me, rf.currentTerm)
-=======
-	DPrintf(dVote, "C%d start election, term is %d and electiontime is %v\n", me, rf.currentTerm, rf.electionTimeout.Milliseconds())
->>>>>>> 86cda16b0fca08bd30388c78b4044d5a73686293
 	// 初始化投票控制结构
 	voteCtrl := VoteController{
 		wg:        sync.WaitGroup{},
@@ -68,11 +64,7 @@ func (rf *Raft) voteToSingle(server int, args *RequestVoteArgs, voteCtrl *VoteCo
 		defer rf.mu.Unlock()
 		// 如果回复的任期大于当前任期，则更新当前任期
 		if reply.Term > rf.currentTerm {
-<<<<<<< HEAD
 			rf.setNewTerm(reply.Term, -1)
-=======
-			rf.setNewTerm(reply.Term)
->>>>>>> 86cda16b0fca08bd30388c78b4044d5a73686293
 			rf.resetTime()
 			rf.updateTime = time.Now()
 			voteCtrl.voteCh <- false
@@ -163,10 +155,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-<<<<<<< HEAD
-=======
-	DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
->>>>>>> 86cda16b0fca08bd30388c78b4044d5a73686293
 	// 如果请求的任期小于当前任期
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
@@ -176,11 +164,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 	// 如果请求的任期大于当前任期
 	if args.Term > rf.currentTerm {
-<<<<<<< HEAD
 		rf.setNewTerm(args.Term, -1)
-=======
-		rf.setNewTerm(args.Term)
->>>>>>> 86cda16b0fca08bd30388c78b4044d5a73686293
 	}
 
 	if (rf.votedFor == -1 || rf.votedFor == args.CandidateID) &&
@@ -190,11 +174,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		// 如果 votedFor 为空或为 candidateId，并且候选者的日志至少和接收者一样新
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
-<<<<<<< HEAD
-=======
-		rf.updateTime = time.Now()
-		DPrintf(dVote, "F%d vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n", rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
->>>>>>> 86cda16b0fca08bd30388c78b4044d5a73686293
 		rf.persist()
 		// DPrintf(dVote, "F%d vote for C%d because lastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, lastLogIndex is %d, rf.recvdIndex is %d\n",
 		// 	rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
@@ -202,12 +181,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	} else {
 		reply.VoteGranted = false
 		if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
-<<<<<<< HEAD
 			// DPrintf(dVote, "F%d refuse vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n",
 			// 	rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
-=======
-			DPrintf(dVote, "F%d refuse vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n", rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
->>>>>>> 86cda16b0fca08bd30388c78b4044d5a73686293
 		}
 	}
 	reply.Term = rf.currentTerm
