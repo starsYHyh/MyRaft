@@ -27,7 +27,7 @@ func (rf *Raft) leaderElection() {
 		Term:         rf.currentTerm, // 当前任期
 		CandidateID:  me,
 		LastLogIndex: rf.recvdIndex,
-		LastLogTerm:  rf.log[rf.recvdIndex].Term,
+		LastLogTerm:  rf.getLogEntry(rf.recvdIndex).Term,
 	}
 	DPrintf(dVote, "C%d start election, term is %d\n", me, rf.currentTerm)
 	// 初始化投票控制结构
@@ -112,7 +112,7 @@ func (rf *Raft) waitVoteReply(voteCtrl *VoteController) {
 						rf.nextIndex[i] = rf.recvdIndex + 1
 						rf.matchIndex[i] = 0
 					}
-					rf.recvdIndex = len(rf.log) - 1
+					rf.recvdIndex = rf.lastIncludedIndex + len(rf.log) - 1
 					DPrintf(dState, "C%d become leader\n", rf.me)
 					rf.entriesToAll()
 					rf.mu.Unlock()
@@ -167,9 +167,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.setNewTerm(args.Term, -1)
 	}
 
+	recvdTerm := rf.getLogEntry(rf.recvdIndex).Term
 	if (rf.votedFor == -1 || rf.votedFor == args.CandidateID) &&
-		(args.LastLogTerm > rf.log[rf.recvdIndex].Term ||
-			(args.LastLogTerm == rf.log[rf.recvdIndex].Term &&
+		(args.LastLogTerm > recvdTerm ||
+			(args.LastLogTerm == recvdTerm &&
 				args.LastLogIndex >= rf.recvdIndex)) {
 		// 如果 votedFor 为空或为 candidateId，并且候选者的日志至少和接收者一样新
 		reply.VoteGranted = true

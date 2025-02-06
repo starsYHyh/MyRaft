@@ -60,6 +60,7 @@ type Raft struct {
 	lastIncludedIndex int    // 快照中包含的最后一个日志条目的索引
 	lastIncludedTerm  int    // 快照中包含的最后一个日志条目的任期
 	snapshot          []byte // 快照数据
+	applySnapshotFlag bool   // 是否需要应用快照
 
 	// 所有服务器上的易失性状态
 	commitIndex     int           // 已知已提交的最高日志条目的索引（初始化为 0，单调增加）
@@ -171,7 +172,6 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 	return true
 }
 
-// 服务说它已经创建了一个快照，其中包含所有信息，直到包括索引。
 // 这意味着服务不再需要日志通过（包括）该索引。Raft现在应该尽可能地修剪其日志。
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
@@ -191,12 +191,8 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.lastIncludedTerm = newLastIncludedTerm
 	rf.lastIncludedIndex = newLastIncludedIndex
 	rf.snapshot = snapshot
-	DPrintf(dSnap, "F%d snapshot index %d, lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, index, rf.lastIncludedIndex, rf.lastIncludedTerm)
+	DPrintf(dSnap, "F%d snapshot lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, rf.lastIncludedIndex, rf.lastIncludedTerm)
 	rf.persistWithSnapshot()
-}
-
-func (rf *Raft) InstallSnapshot() {
-
 }
 
 type RequestVoteArgs struct {
@@ -294,6 +290,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.currentTerm = 0
 	rf.votedFor = -1
 	rf.snapshot = make([]byte, 0)
+	rf.applySnapshotFlag = false
 
 	rf.readPersist(persister.ReadRaftState())
 	// rf.readPersistWithSnapshot(persister.ReadRaftState(), persister.ReadSnapshot())
