@@ -26,10 +26,7 @@ type AppendController struct {
 
 // 获得指定范围的日志条目
 func (rf *Raft) getSlicedLog(startIndex int, endIndex int) []LogEntry {
-	if startIndex < 0 {
-		startIndex = 0
-	}
-	if endIndex > rf.recvdIndex || endIndex < 0 {
+	if endIndex == -1 {
 		endIndex = rf.recvdIndex
 	}
 	return rf.log[startIndex-rf.lastIncludedIndex : endIndex-rf.lastIncludedIndex+1]
@@ -37,11 +34,14 @@ func (rf *Raft) getSlicedLog(startIndex int, endIndex int) []LogEntry {
 
 // 获得指定索引的日志条目
 func (rf *Raft) getLogEntry(index int) LogEntry {
-	if index > rf.recvdIndex {
-		return LogEntry{}
+	if index == -1 {
+		index = rf.recvdIndex
 	}
-	if index <= rf.lastIncludedIndex {
-		return LogEntry{Term: rf.lastIncludedTerm}
+	if index < rf.lastIncludedIndex {
+		DPrintf(dError, "L%d getLogEntry error, index %d, lastIncludedIndex %d\n", rf.me, index, rf.lastIncludedIndex)
+	}
+	if index > rf.recvdIndex {
+		DPrintf(dError, "L%d getLogEntry error, index %d, recvdIndex %d\n", rf.me, index, rf.recvdIndex)
 	}
 	return rf.log[index-rf.lastIncludedIndex]
 }
@@ -55,7 +55,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	}
 	curTerm := rf.currentTerm
 	rf.log = append(rf.log, LogEntry{Term: curTerm, Command: command})
-	rf.persist()
+	rf.persistWithSnapshot()
 	rf.recvdIndex++
 	recvdIndex := rf.recvdIndex
 	rf.nextIndex[me] = recvdIndex + 1
@@ -94,8 +94,7 @@ func (rf *Raft) entriesToAll() {
 					LastIncludedTerm:  rf.lastIncludedTerm,
 					Data:              rf.snapshot,
 				}
-				DPrintf(dSnap, "L%d send snapshot to F%d, because nextIndex is %d, lastIncludedIndex is %d\n", rf.me, i, rf.nextIndex[i], rf.lastIncludedIndex)
-				// DPrintf(dSnap, "L%d send snapshot to F%d\n", rf.me, i)
+				DPrintf(dSnap, "L%d send snapshot to F%d, nextIndex %d, lastIncludedIndex %d\n", rf.me, i, rf.nextIndex[i], rf.lastIncludedIndex)
 				go rf.snapshotToSingle(i, &args, &appendCtrl)
 
 			} else {
@@ -114,6 +113,7 @@ func (rf *Raft) entriesToAll() {
 					Entries:      logEntry,
 					LeaderCommit: rf.commitIndex,
 				}
+				// DPrintf(dTrace, "L%d send entries to F%d, nextIndex %d, recvdIndex %d, loglength %d\n", rf.me, i, rf.nextIndex[i], rf.recvdIndex, len(logEntry))
 				go rf.entriesToSingle(i, &args, &appendCtrl)
 			}
 		}
@@ -141,8 +141,13 @@ func (rf *Raft) entriesToSingle(server int, args *AppendEntriesArgs, appendCtrl 
 		if rf.currentTerm == args.Term {
 			if reply.Success {
 				// 有时候可能会连续重复发送相同的日志，导致nextIndex不断增加，所以需要取最小值
-				rf.nextIndex[server] = min(rf.recvdIndex+1, rf.nextIndex[server]+len(args.Entries))
+				tempNextIndex := rf.nextIndex[server]
+				// rf.nextIndex[server] = min(rf.recvdIndex+1, rf.nextIndex[server]+len(args.Entries))
+				rf.nextIndex[server] = args.PrevLogIndex + len(args.Entries) + 1
 				rf.matchIndex[server] = rf.nextIndex[server] - 1
+				if tempNextIndex != rf.nextIndex[server] {
+					DPrintf(dInfo, "L%d update F%d nextIndex from %d to %d\n", rf.me, server, tempNextIndex, rf.nextIndex[server])
+				}
 				appendCtrl.appendCh <- true
 			} else {
 				rf.nextIndex[server] = reply.XIndex
@@ -177,7 +182,6 @@ func (rf *Raft) waitAppendReply(appendCtrl *AppendController, term int) {
 					rf.commitIndex = appendCtrl.recvdIndex
 					if preCommitIndex != rf.commitIndex {
 						DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d\n", rf.me, preCommitIndex, rf.commitIndex)
-						// DPrintf(dCommit, "L%d log is %v\n", rf.me, rf.log)
 						rf.applyCondSignal()
 					}
 					rf.mu.Unlock()
@@ -226,12 +230,32 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	rf.updateTime = time.Now()
-	mPrevLogTerm := rf.getLogEntry(args.PrevLogIndex).Term
+	mPrevLogTerm := rf.lastIncludedTerm
+	newArgsPrevLogTerm := args.PrevLogTerm
+	newArgsPrevLogIndex := args.PrevLogIndex
+	// 这一段代码是为了判断prevLogIndex、recvIndex和lastIncludedIndex的关系
+	// 如果prevLogIndex <= recvIndex，则说明prevLogIndex处的日志已经存在
+	// 如果prevLogIndex < lastIncludedIndex，则说明prevLogIndex处的日志在快照中，需要特殊处理
+	// 因为无法获取到prevLogIndex处的日志，所以需要将prevLogIndex设置为lastIncludedIndex
+	// 通过lastIncludedIndex和lastIncludedTerm来判断prevLogIndex处的日志是否匹配，如果不匹配，则返回false
+	if args.PrevLogIndex <= rf.recvdIndex {
+		if args.PrevLogIndex >= rf.lastIncludedIndex {
+			mPrevLogTerm = rf.getLogEntry(args.PrevLogIndex).Term
+		} else {
+			newArgsPrevLogIndex = rf.lastIncludedIndex
+			if newArgsPrevLogIndex-args.PrevLogIndex > len(args.Entries) {
+				DPrintf(dError, "F%d entries length error, prevLogIndex %d, lastIncludedIndex %d, entries length %d\n", me, args.PrevLogIndex, rf.lastIncludedIndex, len(args.Entries))
+			}
+			newArgsPrevLogTerm = args.Entries[newArgsPrevLogIndex-args.PrevLogIndex-1].Term
+		}
+	}
+
 	// 如果日志在 prevLogIndex 处不匹配，则返回 false
-	if args.PrevLogIndex > rf.recvdIndex || mPrevLogTerm != args.PrevLogTerm {
-		if args.PrevLogIndex <= rf.recvdIndex {
+	// 存在的问题是，无法处理prevLogIndex < lastIncludedIndex的情况，因为无法获取到prevLogIndex处的日志
+	if newArgsPrevLogIndex > rf.recvdIndex || mPrevLogTerm != newArgsPrevLogTerm {
+		if newArgsPrevLogIndex <= rf.recvdIndex {
 			// 如果 prevLogIndex <= recvdIndex，则说明在prevLogIndex处，日志的任期不匹配，需要找到冲突的日志条目
-			DPrintf(dDrop, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, mPrevLogTerm, args.PrevLogTerm)
+			DPrintf(dDrop, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, mPrevLogTerm, newArgsPrevLogTerm)
 			// 找到冲突条目的任期和该任期中它存储的第一个索引
 			reply.XTerm = mPrevLogTerm
 			xIndex := args.PrevLogIndex
@@ -249,23 +273,25 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			reply.XIndex = rf.recvdIndex + 1
 		}
 
-		DPrintf(dInfo, "F%d update nextIndex from %d to %d\n", me, args.PrevLogIndex+1, reply.XIndex)
+		DPrintf(dInfo, "F%d update nextIndex from %d to %d\n", me, newArgsPrevLogIndex+1, reply.XIndex)
 		reply.Term = rf.currentTerm
 		return
 	}
 
 	// 如果一个已经存在的条目和新条目在相同的索引位置有相同的任期号和索引值，则复制其后的所有条目
-	// rf.log = rf.log[:args.PrevLogIndex+1]
-	// rf.log = append(rf.log, args.Entries...)
-	rf.log = rf.getSlicedLog(rf.lastIncludedIndex, args.PrevLogIndex)
-	rf.log = append(rf.log, args.Entries...)
-	rf.persist()
+	rf.log = rf.getSlicedLog(rf.lastIncludedIndex, newArgsPrevLogIndex)
+	rf.log = append(rf.log, args.Entries[newArgsPrevLogIndex-args.PrevLogIndex:]...)
+	rf.persistWithSnapshot()
+	preRecvIndex := rf.recvdIndex
 	rf.recvdIndex = rf.lastIncludedIndex + len(rf.log) - 1
+	if preRecvIndex != rf.recvdIndex {
+		DPrintf(dInfo, "F%d update recvdIndex from %d to %d\n", me, preRecvIndex, rf.recvdIndex)
+	}
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommit, rf.recvdIndex)
-		// DPrintf(dCommit, "F%d update commitIndex to %d, and log is %v\n", me, rf.commitIndex, rf.log)
-		DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
+		// DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
+		DPrintf(dCommit, "F%d commitIndex from %d to %d, recvdIndex %d\n", me, rf.commitIndex, args.LeaderCommit, rf.recvdIndex)
 		rf.applyCondSignal()
 	}
 
@@ -285,8 +311,8 @@ func (rf *Raft) applyLog() {
 	defer rf.mu.Unlock()
 
 	for !rf.killed() {
+		rf.lastApplied = max(rf.lastApplied, rf.lastIncludedIndex)
 		if rf.applySnapshotFlag {
-
 			// 如果需要应用快照，则应用快照
 			applyMsg := ApplyMsg{
 				CommandValid:  false,

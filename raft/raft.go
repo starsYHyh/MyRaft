@@ -183,16 +183,14 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 		return
 	}
 	// 更新日志：截断
-	// 使用
-	snapshotLen := index - rf.lastIncludedIndex
-	newLastIncludedTerm := rf.log[snapshotLen].Term
+	newLastIncludedTerm := rf.getLogEntry(index).Term
 	newLastIncludedIndex := index
-	rf.log = append([]LogEntry{{Term: newLastIncludedTerm, Command: nil}}, rf.log[snapshotLen+1:]...)
+	rf.log = append([]LogEntry{{Term: newLastIncludedTerm, Command: nil}}, rf.getSlicedLog(index+1, -1)...)
 	rf.lastIncludedTerm = newLastIncludedTerm
 	rf.lastIncludedIndex = newLastIncludedIndex
 	rf.snapshot = snapshot
-	DPrintf(dSnap, "F%d snapshot lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, rf.lastIncludedIndex, rf.lastIncludedTerm)
 	rf.persistWithSnapshot()
+	DPrintf(dSnap, "F%d snapshot lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, rf.lastIncludedIndex, rf.lastIncludedTerm)
 }
 
 type RequestVoteArgs struct {
@@ -251,8 +249,7 @@ func (rf *Raft) setNewTerm(term int, voteFor int) {
 	rf.currentTerm = term
 	rf.votedFor = voteFor
 	rf.state = Follower
-	// DPrintf(dState, "F%d become follower\n", rf.me)
-	rf.persist()
+	rf.persistWithSnapshot()
 }
 
 // 在ticker中，需要处理两件事
@@ -292,11 +289,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.snapshot = make([]byte, 0)
 	rf.applySnapshotFlag = false
 
-	rf.readPersist(persister.ReadRaftState())
-	// rf.readPersistWithSnapshot(persister.ReadRaftState(), persister.ReadSnapshot())
-
-	// DPrintf(dState, "F%d currentTerm is %d, votedFor is %d, log is %v\n", rf.me, rf.currentTerm, rf.votedFor, rf.log)
-	DPrintf(dState, "F%d currentTerm is %d, votedFor is %d\n", rf.me, rf.currentTerm, rf.votedFor)
+	rf.readPersistWithSnapshot(persister.ReadRaftState(), persister.ReadSnapshot())
+	DPrintf(dSnap, "F%d recover lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, rf.lastIncludedIndex, rf.lastIncludedTerm)
 
 	// 初始化状态
 	rf.state = Follower
@@ -310,8 +304,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
 	rf.updateTime = time.Now()
 
-	rf.commitIndex = 0              // 已知已提交的最高日志条目的索引
-	rf.recvdIndex = len(rf.log) - 1 // 已知收到的最后一个日志条目的索引
+	rf.commitIndex = 0                                     // 已知已提交的最高日志条目的索引
+	rf.recvdIndex = rf.lastIncludedIndex + len(rf.log) - 1 // 已知收到的最后一个日志条目的索引
 
 	rf.nextIndex = make([]int, len(rf.peers))
 	rf.matchIndex = make([]int, len(rf.peers))

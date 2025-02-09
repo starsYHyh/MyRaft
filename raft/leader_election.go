@@ -19,7 +19,7 @@ func (rf *Raft) leaderElection() {
 	me := rf.me
 	rf.currentTerm++
 	rf.votedFor = me
-	rf.persist()
+	rf.persistWithSnapshot()
 	rf.state = Candidate
 	rf.resetTime() // 重置选举超时计时器
 	// 生成RequestVote RPC参数
@@ -175,7 +175,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		// 如果 votedFor 为空或为 candidateId，并且候选者的日志至少和接收者一样新
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
-		rf.persist()
+		rf.persistWithSnapshot()
 		// DPrintf(dVote, "F%d vote for C%d because lastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, lastLogIndex is %d, rf.recvdIndex is %d\n",
 		// 	rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
 		rf.updateTime = time.Now()
