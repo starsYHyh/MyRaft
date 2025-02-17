@@ -178,8 +178,9 @@ func (rf *Raft) waitAppendReply(appendCtrl *AppendController, term int) {
 				}
 				if appendCtrl.appendCount > len(rf.peers)/2 {
 					// 因为在等待日志提交的过程中，可能有新的日志被leader接受，所以实际上commitIndex应当是旧的recvdIndex
-					preCommitIndex := appendCtrl.commitIndex
-					rf.commitIndex = appendCtrl.recvdIndex
+					preCommitIndex := rf.commitIndex
+					// rf.commitIndex = appendCtrl.recvdIndex
+					rf.commitIndex = max(rf.commitIndex, appendCtrl.recvdIndex)
 					if preCommitIndex != rf.commitIndex {
 						DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d\n", rf.me, preCommitIndex, rf.commitIndex)
 						rf.applyCondSignal()

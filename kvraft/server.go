@@ -22,6 +22,10 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
+	Key         string
+	Value       string
+	ClientID    int64
+	SequenceNum int
 }
 
 type KVServer struct {
@@ -34,6 +38,7 @@ type KVServer struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
+
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {

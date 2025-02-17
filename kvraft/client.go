@@ -9,6 +9,9 @@ import (
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 	// You will have to modify this struct.
+	leaderID    int
+	clientID    int64
+	sequenceNum int
 }
 
 func nrand() int64 {
@@ -51,6 +54,16 @@ func (ck *Clerk) Get(key string) string {
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
+	args := PutAppendArgs{
+		Key:         key,
+		Value:       value,
+		Op:          op,
+		ClientID:    ck.clientID,
+		SequenceNum: ck.sequenceNum,
+	}
+
+	reply :=
+
 }
 
 func (ck *Clerk) Put(key string, value string) {
