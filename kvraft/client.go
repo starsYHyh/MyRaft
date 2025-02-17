@@ -23,9 +23,17 @@ func nrand() int64 {
 
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
+	ck.leaderID = 0
+	ck.clientID = nrand() // 为Clerk对象的clientId字段生成一个随机数
+	ck.sequenceNum = -1
 	ck.servers = servers
 	// You'll have to add code here.
 	return ck
+}
+
+func (ck *Clerk) updateSequenceNum() int {
+	ck.sequenceNum++
+	return ck.sequenceNum
 }
 
 // fetch the current value for a key.
@@ -59,10 +67,19 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		Value:       value,
 		Op:          op,
 		ClientID:    ck.clientID,
-		SequenceNum: ck.sequenceNum,
+		SequenceNum: ck.updateSequenceNum(),
 	}
 
-	reply :=
+	reply := PutAppendReply{}
+	for {
+		server := ck.servers[ck.leaderID]
+		ok := server.Call("KVServer.PutAppend", &args, &reply)
+		if ok {
+			break
+		}
+		ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
+	}
+	ck.sequenceNum++
 
 }
 
