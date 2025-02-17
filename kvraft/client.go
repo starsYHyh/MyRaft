@@ -4,6 +4,7 @@ import (
 	"MyRaft/labrpc"
 	"crypto/rand"
 	"math/big"
+	"time"
 )
 
 type Clerk struct {
@@ -42,24 +43,44 @@ func (ck *Clerk) updateSequenceNum() int {
 //
 // you can send an RPC with code like this:
 // ok := ck.servers[i].Call("KVServer.Get", &args, &reply)
-//
-// the types of args and reply (including whether they are pointers)
-// must match the declared types of the RPC handler function's
-// arguments. and reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) string {
+	args := GetArgs{
+		Key:         key,
+		ClientID:    ck.clientID,
+		SequenceNum: ck.updateSequenceNum(),
+	}
+	reply := GetReply{
+		Err:   "",
+		Value: "",
+	}
 
-	// You will have to modify this function.
-	return ""
+	for {
+		server := ck.servers[ck.leaderID]
+		DPrintf(dClient, "C%d: server %v, key %v, clientID %v, sequenceNum %v\n", ck.clientID, ck.leaderID, key, ck.clientID, args.SequenceNum)
+		ok := server.Call("KVServer.Get", &args, &reply)
+		if ok {
+			if reply.Err == OK {
+				break
+			} else if reply.Err == ErrWrongLeader {
+				// 如果返回的错误是ErrWrongLeader，那么就更新leaderID，然后继续尝试
+				ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
+			} else {
+				// 如果返回的错误是ErrNoKey，那么就说明key不存在，直接返回空字符串
+				return ""
+			}
+		} else {
+			// 如果RPC调用失败，那么也更新leaderID，然后继续尝试
+			ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
+		}
+		time.Sleep(60 * time.Millisecond)
+	}
+	return reply.Value
 }
 
 // shared by Put and Append.
 //
 // you can send an RPC with code like this:
 // ok := ck.servers[i].Call("KVServer.PutAppend", &args, &reply)
-//
-// the types of args and reply (including whether they are pointers)
-// must match the declared types of the RPC handler function's
-// arguments. and reply must be passed as a pointer.
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
 	args := PutAppendArgs{
@@ -70,17 +91,24 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		SequenceNum: ck.updateSequenceNum(),
 	}
 
-	reply := PutAppendReply{}
+	reply := PutAppendReply{
+		Err: "",
+	}
 	for {
 		server := ck.servers[ck.leaderID]
+		DPrintf(dClient, "C%d: server %v, key %v, value %v, op %v, clientID %v, sequenceNum %v\n", ck.clientID, ck.leaderID, key, value, op, ck.clientID, args.SequenceNum)
 		ok := server.Call("KVServer.PutAppend", &args, &reply)
 		if ok {
-			break
+			if reply.Err == OK {
+				break
+			} else if reply.Err == ErrWrongLeader {
+				ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
+			}
+		} else {
+			ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
 		}
-		ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
+		time.Sleep(60 * time.Millisecond)
 	}
-	ck.sequenceNum++
-
 }
 
 func (ck *Clerk) Put(key string, value string) {
