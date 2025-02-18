@@ -14,10 +14,11 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-	Key         string
-	Value       string
-	ClientID    int64
-	SequenceNum int
+	Key         string // 键
+	Value       string // 值
+	Type        string // 操作类型，Put/Append/Get
+	ClientID    int64  // 客户端ID
+	SequenceNum int    // 请求序列号
 }
 
 type KVServer struct {
@@ -39,6 +40,15 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
+	kv.mu.Lock()
+	kv.rf.Start(Op{
+		Key:         args.Key,
+		Value:       args.Value,
+		ClientID:    args.ClientID,
+		Type:        args.Op,
+		SequenceNum: args.SequenceNum,
+	})
+	kv.mu.Unlock()
 }
 
 // the tester calls Kill() when a KVServer instance won't
