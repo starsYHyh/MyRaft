@@ -6,14 +6,12 @@ import (
 	"MyRaft/raft"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const Debug = false
 
 type Op struct {
-	// Your definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
 	Key         string // 键
 	Value       string // 值
 	Type        string // 操作类型，Put/Append/Get
@@ -31,7 +29,47 @@ type KVServer struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
+	data map[string]string // 存储键值对
 
+}
+
+func (kv *KVServer) processLogEntry() {
+	for {
+		rawMsg := <-kv.applyCh
+		kv.mu.Lock()
+		if rawMsg.CommandValid {
+			Msg := rawMsg.Command.(Op)
+			kv.mu.Lock()
+			if Msg.Type == "Put" {
+				// 如果是Put操作
+				kv.data[Msg.Key] = Msg.Value
+			} else if Msg.Type == "Append" {
+				// 如果是Append操作
+				kv.data[Msg.Key] += Msg.Value
+			} else if Msg.Type == "Get" {
+				// 如果是Get操作
+			}
+			kv.mu.Unlock()
+		}
+	}
+}
+
+func (kv *KVServer) WaitApplyCh() (Op, Err) {
+	startTerm, _ := kv.rf.GetState()
+	timer := time.NewTimer(1000 * time.Millisecond)
+	for {
+		select {
+		case Msg := <-kv.applyCh:
+			return Msg, OK
+		case <-timer.C:
+			curTerm, isLeader := kv.rf.GetState()
+			if curTerm != startTerm || !isLeader {
+				return Op{}, ErrWrongLeader
+			}
+			timer.Reset(1000 * time.Millisecond)
+
+		}
+	}
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
@@ -41,7 +79,12 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
 	kv.mu.Lock()
-	kv.rf.Start(Op{
+	defer kv.mu.Unlock()
+	if _, isLeader := kv.rf.GetState(); !isLeader {
+		reply.Err = ErrWrongLeader
+		return
+	}
+	recvdIndex, _, _ := kv.rf.Start(Op{
 		Key:         args.Key,
 		Value:       args.Value,
 		ClientID:    args.ClientID,
@@ -49,6 +92,9 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		SequenceNum: args.SequenceNum,
 	})
 	kv.mu.Unlock()
+	reply.Err = OK
+	Msg := <-kv.WaitApplyCh()
+	// 等待日志提交
 }
 
 // the tester calls Kill() when a KVServer instance won't
