@@ -43,10 +43,8 @@ func (kv *KVServer) processLogEntry() {
 	for {
 		// 接收Leader需要应用的日志
 		rawMsg := <-kv.applyCh
-		kv.mu.Lock()
 		if rawMsg.CommandValid {
 			Msg := rawMsg.Command.(Op)
-			kv.mu.Lock()
 			result := Result{
 				opType: Msg.Type,
 				value:  "",
@@ -66,8 +64,10 @@ func (kv *KVServer) processLogEntry() {
 					result.err = ErrNoKey
 				}
 			}
-			kv.processCh <- result
-			kv.mu.Unlock()
+			if kv.processCh != nil {
+				kv.processCh <- result
+				continue
+			}
 		}
 	}
 }
@@ -78,6 +78,9 @@ func (kv *KVServer) WaitApplyCh() Result {
 	for {
 		select {
 		case Msg := <-kv.processCh:
+			// 当从通道中读取到数据时，关闭通道，因为只允许从通道中读取一次（leader）
+			// 防止follower重复向通道中写入数据
+			close(kv.processCh)
 			return Msg
 		case <-timer.C:
 			curTerm, isLeader := kv.rf.GetState()
@@ -108,12 +111,12 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		Type:        "Get",
 		SequenceNum: args.SequenceNum,
 	})
+	kv.processCh = make(chan Result) // 仅在Start之后才能创建processCh
 	kv.mu.Unlock()
 	// 等待日志提交
 	result := kv.WaitApplyCh()
 	reply.Err = result.err
 	reply.Value = result.value
-	kv.mu.Unlock()
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
@@ -131,11 +134,11 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		Type:        args.Op,
 		SequenceNum: args.SequenceNum,
 	})
+	kv.processCh = make(chan Result) // 仅在Start之后才能创建processCh
 	kv.mu.Unlock()
 	// 等待日志提交
 	result := kv.WaitApplyCh()
 	reply.Err = result.err
-	kv.mu.Unlock()
 }
 
 func (kv *KVServer) Kill() {
@@ -174,7 +177,8 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 	kv.data = make(map[string]string)
-	kv.processCh = make(chan Result)
+	// kv.processCh = make(chan Result)
+	go kv.processLogEntry()
 
 	return kv
 }

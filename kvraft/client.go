@@ -72,7 +72,7 @@ func (ck *Clerk) Get(key string) string {
 			// 如果RPC调用失败，那么也更新leaderID，然后继续尝试
 			ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
 		}
-		time.Sleep(60 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	return reply.Value
 }
@@ -99,6 +99,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		DPrintf(dClient, "C%d: server %v, key %v, value %v, op %v, clientID %v, sequenceNum %v\n", ck.clientID, ck.leaderID, key, value, op, ck.clientID, args.SequenceNum)
 		ok := server.Call("KVServer.PutAppend", &args, &reply)
 		if ok {
+			DPrintf(dClient, "C%d: PutAppend reply %v\n", ck.clientID, reply.Err)
 			if reply.Err == OK {
 				break
 			} else if reply.Err == ErrWrongLeader {
