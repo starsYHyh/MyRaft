@@ -11,6 +11,12 @@ import (
 
 const Debug = false
 
+type Result struct {
+	opType string
+	value  string
+	err    Err
+} // 用于存储processLogEntry操作的传递给通道的值
+
 type Op struct {
 	Key         string // 键
 	Value       string // 值
@@ -23,23 +29,29 @@ type KVServer struct {
 	mu      sync.Mutex
 	me      int
 	rf      *raft.Raft
-	applyCh chan raft.ApplyMsg
-	dead    int32 // set by Kill()
+	applyCh chan raft.ApplyMsg // leader->kvserver
+	dead    int32              // set by Kill()
 
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
-	data map[string]string // 存储键值对
-
+	data      map[string]string // 存储键值对
+	processCh chan Result
 }
 
 func (kv *KVServer) processLogEntry() {
 	for {
+		// 接收Leader需要应用的日志
 		rawMsg := <-kv.applyCh
 		kv.mu.Lock()
 		if rawMsg.CommandValid {
 			Msg := rawMsg.Command.(Op)
 			kv.mu.Lock()
+			result := Result{
+				opType: Msg.Type,
+				value:  "",
+				err:    OK,
+			}
 			if Msg.Type == "Put" {
 				// 如果是Put操作
 				kv.data[Msg.Key] = Msg.Value
@@ -47,44 +59,72 @@ func (kv *KVServer) processLogEntry() {
 				// 如果是Append操作
 				kv.data[Msg.Key] += Msg.Value
 			} else if Msg.Type == "Get" {
-				// 如果是Get操作
+				// 如果是Get操作，则需要判断是否存在该键
+				if value, ok := kv.data[Msg.Key]; ok {
+					result.value = value
+				} else {
+					result.err = ErrNoKey
+				}
 			}
+			kv.processCh <- result
 			kv.mu.Unlock()
 		}
 	}
 }
 
-func (kv *KVServer) WaitApplyCh() (Op, Err) {
+func (kv *KVServer) WaitApplyCh() Result {
 	startTerm, _ := kv.rf.GetState()
 	timer := time.NewTimer(1000 * time.Millisecond)
 	for {
 		select {
-		case Msg := <-kv.applyCh:
-			return Msg, OK
+		case Msg := <-kv.processCh:
+			return Msg
 		case <-timer.C:
 			curTerm, isLeader := kv.rf.GetState()
 			if curTerm != startTerm || !isLeader {
-				return Op{}, ErrWrongLeader
+				return Result{
+					opType: "",
+					value:  "",
+					err:    ErrWrongLeader,
+				}
 			}
 			timer.Reset(1000 * time.Millisecond)
-
 		}
 	}
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
+	kv.mu.Lock()
+	if _, isLeader := kv.rf.GetState(); !isLeader {
+		reply.Err = ErrWrongLeader
+		kv.mu.Unlock()
+		return
+	}
+	kv.rf.Start(Op{
+		Key:         args.Key,
+		Value:       "",
+		ClientID:    args.ClientID,
+		Type:        "Get",
+		SequenceNum: args.SequenceNum,
+	})
+	kv.mu.Unlock()
+	// 等待日志提交
+	result := kv.WaitApplyCh()
+	reply.Err = result.err
+	reply.Value = result.value
+	kv.mu.Unlock()
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
 	kv.mu.Lock()
-	defer kv.mu.Unlock()
 	if _, isLeader := kv.rf.GetState(); !isLeader {
 		reply.Err = ErrWrongLeader
+		kv.mu.Unlock()
 		return
 	}
-	recvdIndex, _, _ := kv.rf.Start(Op{
+	kv.rf.Start(Op{
 		Key:         args.Key,
 		Value:       args.Value,
 		ClientID:    args.ClientID,
@@ -92,19 +132,12 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		SequenceNum: args.SequenceNum,
 	})
 	kv.mu.Unlock()
-	reply.Err = OK
-	Msg := <-kv.WaitApplyCh()
 	// 等待日志提交
+	result := kv.WaitApplyCh()
+	reply.Err = result.err
+	kv.mu.Unlock()
 }
 
-// the tester calls Kill() when a KVServer instance won't
-// be needed again. for your convenience, we supply
-// code to set rf.dead (without needing a lock),
-// and a killed() method to test rf.dead in
-// long-running loops. you can also add your own
-// code to Kill(). you're not required to do anything
-// about this, but it may be convenient (for example)
-// to suppress debug output from a Kill()ed instance.
 func (kv *KVServer) Kill() {
 	atomic.StoreInt32(&kv.dead, 1)
 	kv.rf.Kill()
@@ -138,11 +171,10 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.maxraftstate = maxraftstate
 
 	// You may need initialization code here.
-
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
-
-	// You may need initialization code here.
+	kv.data = make(map[string]string)
+	kv.processCh = make(chan Result)
 
 	return kv
 }
