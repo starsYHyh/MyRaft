@@ -316,6 +316,7 @@ func (rf *Raft) applyLog() {
 		if rf.applySnapshotFlag {
 			// 如果需要应用快照，则应用快照
 			applyMsg := ApplyMsg{
+				ServerID:      rf.me,
 				CommandValid:  false,
 				SnapshotValid: true,
 				Snapshot:      rf.snapshot,
@@ -329,6 +330,7 @@ func (rf *Raft) applyLog() {
 		} else if rf.commitIndex > rf.lastApplied && rf.recvdIndex > rf.lastApplied {
 			rf.lastApplied++
 			applyMsg := ApplyMsg{
+				ServerID:      rf.me,
 				CommandValid:  true,
 				Command:       rf.getLogEntry(rf.lastApplied).Command,
 				CommandIndex:  rf.lastApplied,

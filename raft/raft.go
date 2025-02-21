@@ -15,6 +15,8 @@ import (
 // 将CommandValid设置为true，以指示ApplyMsg包含新提交的日志条目。
 // 在第2D部分中，您将希望在applyCh上发送其他类型的消息（例如快照），
 type ApplyMsg struct {
+	ServerID int // 服务器ID
+
 	CommandValid bool
 	Command      interface{}
 	CommandIndex int
