@@ -35,7 +35,7 @@ type KVServer struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
-	data      map[string]string // 存储键值对
+	data      []map[string]string // 存储键值对
 	processCh chan Result
 }
 
@@ -52,13 +52,13 @@ func (kv *KVServer) processLogEntry() {
 			}
 			if Msg.Type == "Put" {
 				// 如果是Put操作
-				kv.data[Msg.Key] = Msg.Value
+				kv.data[rawMsg.ServerID][Msg.Key] = Msg.Value
 			} else if Msg.Type == "Append" {
 				// 如果是Append操作
-				kv.data[Msg.Key] += Msg.Value
+				kv.data[rawMsg.ServerID][Msg.Key] += Msg.Value
 			} else if Msg.Type == "Get" {
 				// 如果是Get操作，则需要判断是否存在该键
-				if value, ok := kv.data[Msg.Key]; ok {
+				if value, ok := kv.data[rawMsg.ServerID][Msg.Key]; ok {
 					result.value = value
 				} else {
 					result.err = ErrNoKey
@@ -175,8 +175,11 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	// You may need initialization code here.
 	kv.applyCh = make(chan raft.ApplyMsg)
+	kv.data = make([]map[string]string, len(servers))
+	for i := range kv.data {
+		kv.data[i] = make(map[string]string)
+	}
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
-	kv.data = make(map[string]string)
 	// kv.processCh = make(chan Result)
 	go kv.processLogEntry()
 
