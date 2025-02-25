@@ -56,9 +56,10 @@ func (ck *Clerk) Get(key string) string {
 
 	for {
 		server := ck.servers[ck.leaderID]
-		DPrintf(dClient, "C%d: server %v, key %v, clientID %v, sequenceNum %v\n", ck.clientID, ck.leaderID, key, ck.clientID, args.SequenceNum)
+		DPrintf(dClient, "C%d: server %v, key %v, sequenceNum %v\n", ck.clientID, ck.leaderID, key, args.SequenceNum)
 		ok := server.Call("KVServer.Get", &args, &reply)
 		if ok {
+			DPrintf(dState, "C%d: Get reply %v\n", ck.clientID, reply.Err)
 			if reply.Err == OK {
 				break
 			} else if reply.Err == ErrWrongLeader {
@@ -96,10 +97,10 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 	}
 	for {
 		server := ck.servers[ck.leaderID]
-		DPrintf(dClient, "C%d: server %v, key %v, value %v, op %v, clientID %v, sequenceNum %v\n", ck.clientID, ck.leaderID, key, value, op, ck.clientID, args.SequenceNum)
+		DPrintf(dClient, "C%d: server %v, key %v, value %v, sequenceNum %v\n", ck.clientID, ck.leaderID, key, value, args.SequenceNum)
 		ok := server.Call("KVServer.PutAppend", &args, &reply)
 		if ok {
-			DPrintf(dClient, "C%d: PutAppend reply %v\n", ck.clientID, reply.Err)
+			DPrintf(dState, "C%d: PutAppend reply %v\n", ck.clientID, reply.Err)
 			if reply.Err == OK {
 				break
 			} else if reply.Err == ErrWrongLeader {

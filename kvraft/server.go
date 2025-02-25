@@ -36,7 +36,13 @@ type KVServer struct {
 
 	// Your definitions here.
 	data      []map[string]string // 存储键值对
-	processCh chan Result
+	processCh chan Result         // 用于存储processLogEntry操作的传递给通道的值
+	// 应该给每一个log entry一个唯一的序列号，这样就可以通过序列号来判断是否已经应用了这个log entry
+	// 但是这个序列号是在client端生成的，所以需要在KVServer中维护一个clientID和sequenceNum
+	// 用于判断是否已经应用了这个log entry
+	logMap map[int64]int // 用于存储每个clientID对应的最大sequenceNum
+
+	remainTasks int // 用于存储当前KVServer中还有多少任务没有完成
 }
 
 func (kv *KVServer) processLogEntry() {
@@ -44,12 +50,14 @@ func (kv *KVServer) processLogEntry() {
 		// 接收Leader需要应用的日志
 		rawMsg := <-kv.applyCh
 		if rawMsg.CommandValid {
+			DPrintf(dLog, "S%v need to process log entry\n", rawMsg.ServerID)
 			Msg := rawMsg.Command.(Op)
 			result := Result{
 				opType: Msg.Type,
 				value:  "",
 				err:    OK,
 			}
+			kv.mu.Lock()
 			if Msg.Type == "Put" {
 				// 如果是Put操作
 				kv.data[rawMsg.ServerID][Msg.Key] = Msg.Value
@@ -64,10 +72,17 @@ func (kv *KVServer) processLogEntry() {
 					result.err = ErrNoKey
 				}
 			}
-			if kv.processCh != nil {
+
+			if kv.logMap[Msg.ClientID] == 1 {
+				DPrintf(dLog, "S%v need to notify client\n", rawMsg.ServerID)
+				kv.logMap[Msg.ClientID] = 0
+				kv.mu.Unlock()
 				kv.processCh <- result
 				continue
+			} else {
+				DPrintf(dLog, "S%v client has already been notified\n", rawMsg.ServerID)
 			}
+			kv.mu.Unlock()
 		}
 	}
 }
@@ -78,12 +93,15 @@ func (kv *KVServer) WaitApplyCh() Result {
 	for {
 		select {
 		case Msg := <-kv.processCh:
-			// 当从通道中读取到数据时，关闭通道，因为只允许从通道中读取一次（leader）
-			// 防止follower重复向通道中写入数据
-			close(kv.processCh)
+			// kv.mu.Lock()
+			// kv.remainTasks--
+			// DPrintf(dLog2, "KVServer remainTasks %v\n", kv.remainTasks)
+			// kv.mu.Unlock()
 			return Msg
 		case <-timer.C:
+			kv.mu.Lock()
 			curTerm, isLeader := kv.rf.GetState()
+			kv.mu.Unlock()
 			if curTerm != startTerm || !isLeader {
 				return Result{
 					opType: "",
@@ -92,6 +110,7 @@ func (kv *KVServer) WaitApplyCh() Result {
 				}
 			}
 			timer.Reset(1000 * time.Millisecond)
+			DPrintf(dLog, "KVServer WaitApplyCh timeout\n")
 		}
 	}
 }
@@ -99,9 +118,10 @@ func (kv *KVServer) WaitApplyCh() Result {
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
 	kv.mu.Lock()
-	if _, isLeader := kv.rf.GetState(); !isLeader {
+	_, isLeader := kv.rf.GetState()
+	kv.mu.Unlock()
+	if !isLeader {
 		reply.Err = ErrWrongLeader
-		kv.mu.Unlock()
 		return
 	}
 	kv.rf.Start(Op{
@@ -111,9 +131,11 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		Type:        "Get",
 		SequenceNum: args.SequenceNum,
 	})
-	kv.processCh = make(chan Result) // 仅在Start之后才能创建processCh
-	kv.mu.Unlock()
 	// 等待日志提交
+	kv.mu.Lock()
+	kv.logMap[args.ClientID] = 1
+	// kv.remainTasks++
+	kv.mu.Unlock()
 	result := kv.WaitApplyCh()
 	reply.Err = result.err
 	reply.Value = result.value
@@ -121,10 +143,8 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
-	kv.mu.Lock()
 	if _, isLeader := kv.rf.GetState(); !isLeader {
 		reply.Err = ErrWrongLeader
-		kv.mu.Unlock()
 		return
 	}
 	kv.rf.Start(Op{
@@ -134,9 +154,11 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		Type:        args.Op,
 		SequenceNum: args.SequenceNum,
 	})
-	kv.processCh = make(chan Result) // 仅在Start之后才能创建processCh
-	kv.mu.Unlock()
 	// 等待日志提交
+	kv.mu.Lock()
+	kv.logMap[args.ClientID] = 1
+	// kv.remainTasks++
+	kv.mu.Unlock()
 	result := kv.WaitApplyCh()
 	reply.Err = result.err
 }
@@ -180,7 +202,9 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 		kv.data[i] = make(map[string]string)
 	}
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
-	// kv.processCh = make(chan Result)
+	kv.processCh = make(chan Result)
+	kv.logMap = make(map[int64]int)
+	kv.remainTasks = 0
 	go kv.processLogEntry()
 
 	return kv

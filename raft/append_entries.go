@@ -146,7 +146,7 @@ func (rf *Raft) entriesToSingle(server int, args *AppendEntriesArgs, appendCtrl 
 				rf.nextIndex[server] = args.PrevLogIndex + len(args.Entries) + 1
 				rf.matchIndex[server] = rf.nextIndex[server] - 1
 				if tempNextIndex != rf.nextIndex[server] {
-					DPrintf(dInfo, "L%d update F%d nextIndex from %d to %d\n", rf.me, server, tempNextIndex, rf.nextIndex[server])
+					// DPrintf(dInfo, "L%d update F%d nextIndex from %d to %d\n", rf.me, server, tempNextIndex, rf.nextIndex[server])
 				}
 				appendCtrl.appendCh <- true
 			} else {
@@ -256,7 +256,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if newArgsPrevLogIndex > rf.recvdIndex || mPrevLogTerm != newArgsPrevLogTerm {
 		if newArgsPrevLogIndex <= rf.recvdIndex {
 			// 如果 prevLogIndex <= recvdIndex，则说明在prevLogIndex处，日志的任期不匹配，需要找到冲突的日志条目
-			DPrintf(dDrop, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, mPrevLogTerm, newArgsPrevLogTerm)
+			// DPrintf(dDrop, "F%d MISMATCH lastTerm is %d but prevlogterm is %d\n", me, mPrevLogTerm, newArgsPrevLogTerm)
 			// 找到冲突条目的任期和该任期中它存储的第一个索引
 			reply.XTerm = mPrevLogTerm
 			xIndex := args.PrevLogIndex
@@ -274,7 +274,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			reply.XIndex = rf.recvdIndex + 1
 		}
 
-		DPrintf(dInfo, "F%d update nextIndex from %d to %d\n", me, newArgsPrevLogIndex+1, reply.XIndex)
+		// DPrintf(dInfo, "F%d update nextIndex from %d to %d\n", me, newArgsPrevLogIndex+1, reply.XIndex)
 		reply.Term = rf.currentTerm
 		return
 	}
@@ -286,13 +286,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	preRecvIndex := rf.recvdIndex
 	rf.recvdIndex = rf.lastIncludedIndex + len(rf.log) - 1
 	if preRecvIndex != rf.recvdIndex {
-		DPrintf(dInfo, "F%d update recvdIndex from %d to %d\n", me, preRecvIndex, rf.recvdIndex)
+		// DPrintf(dInfo, "F%d update recvdIndex from %d to %d\n", me, preRecvIndex, rf.recvdIndex)
 	}
 	// 如果 leaderCommit > commitIndex，将 commitIndex 设置为 leaderCommit 和已有日志条目索引的较小值
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommit, rf.recvdIndex)
 		// DPrintf(dCommit, "F%d update commitIndex to %d\n", me, rf.commitIndex)
-		DPrintf(dCommit, "F%d commitIndex from %d to %d, recvdIndex %d\n", me, rf.commitIndex, args.LeaderCommit, rf.recvdIndex)
+		// DPrintf(dCommit, "F%d commitIndex from %d to %d, recvdIndex %d\n", me, rf.commitIndex, args.LeaderCommit, rf.recvdIndex)
 		rf.applyCondSignal()
 	}
 

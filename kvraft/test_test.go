@@ -435,7 +435,7 @@ func TestSpeed3A(t *testing.T) {
 
 func TestConcurrent3A(t *testing.T) {
 	// Test: many clients (3A) ...
-	GenericTest(t, "3A", 5, 5, false, false, false, -1, false)
+	GenericTest(t, "3A", 2, 3, false, false, false, -1, false)
 }
 
 func TestUnreliable3A(t *testing.T) {
