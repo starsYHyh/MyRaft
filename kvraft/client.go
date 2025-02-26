@@ -62,6 +62,7 @@ func (ck *Clerk) Get(key string) string {
 			break // 获取到响应，退出循环
 		} else {
 			server += 1
+			DPrintf(dLog2, "C%d call [Get] faild, try next server id =%d", ck.clerkID, server)
 		}
 		time.Sleep(50 * time.Millisecond) // 等待一段时间后继续重试
 	}

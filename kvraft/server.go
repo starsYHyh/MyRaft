@@ -214,13 +214,10 @@ func (kv *KVServer) processMsg() {
 
 		switch Msg.Command { // 根据命令类型执行相应的操作
 		case "Put":
-			kv.data[Msg.Key] = Msg.Value                                        // 执行Put操作，将键值对写入数据源
-			DPrintf(dLog, "KVServer%d Excute CkId=%d Put", kv.me, Msg.ClientID) // 打印日志，表示执行了Put操作
+			kv.data[Msg.Key] = Msg.Value // 执行Put操作，将键值对写入数据源
 		case "Append":
-			DPrintf(dLog, "KVServer%d Excute CkId=%d Append", kv.me, Msg.ClientID) // 打印日志，表示执行了Append操作
-			kv.data[Msg.Key] += Msg.Value                                          // 执行Append操作，将值追加到键对应的现有值后面
+			kv.data[Msg.Key] += Msg.Value // 执行Append操作，将值追加到键对应的现有值后面
 		case "Get":
-			DPrintf(dLog, "KVServer%d Excute CkId=%d Get", kv.me, Msg.ClientID) // 打印日志，表示执行了Get操作
 		}
 		ck.seqNum++ // 更新ClerkOps结构体的序列号
 		kv.mu.Unlock()
