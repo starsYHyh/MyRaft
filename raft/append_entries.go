@@ -182,7 +182,7 @@ func (rf *Raft) waitAppendReply(appendCtrl *AppendController, term int) {
 					// rf.commitIndex = appendCtrl.recvdIndex
 					rf.commitIndex = max(rf.commitIndex, appendCtrl.recvdIndex)
 					if preCommitIndex != rf.commitIndex {
-						DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d\n", rf.me, preCommitIndex, rf.commitIndex)
+						// DPrintf(dCommit, "L%d commit success, commitIndex from %d to %d\n", rf.me, preCommitIndex, rf.commitIndex)
 						rf.applyCondSignal()
 					}
 					rf.mu.Unlock()
