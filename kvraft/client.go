@@ -39,16 +39,16 @@ func (ck *Clerk) Get(key string) string {
 	reply := GetReply{}
 	server := ck.leaderId
 	for {
-		Dprintf("[Clerk-%d] call [Get] request key=%s , SeqId=%d, server=%d", ck.clerkId, key, args.SeqId, server%len(ck.servers))
+		DPrintf(dLog2, "C%d call [Get] request key=%s, seq=%d,")
 		ok := ck.SendGet(server%len(ck.servers), &args, &reply) // 发送 Get 请求给指定的服务器
 		if ok {
 			if reply.Err == ErrWrongLeader { // 如果收到了 ErrWrongLeader 错误，表示当前服务器不是 Leader
 				server += 1
-				Dprintf("[Clerk-%d] ErrWrongLeader, retry server=%d, args=%v", ck.clerkId, server%len(ck.servers), args)
+				DPrintf(dLog2, "C%d ErrWrongLeader, retry server=%d, args=%v", ck.clerkId, server%len(ck.servers), args)
 				continue // 重试下一个服务器
 			}
 			ck.leaderId = server // 更新 Leader 的标识符
-			Dprintf("[Clerk-%d] call [Get] response server=%d reply=%v, args=%v", ck.clerkId, server%len(ck.servers), reply, args)
+			DPrintf(dLog2, "C%d call [Get] response server=%d reply=%v, args=%v", ck.clerkId, server%len(ck.servers), reply, args)
 			break // 获取到响应，退出循环
 		} else {
 			server += 1
@@ -76,21 +76,21 @@ func (ck *Clerk) PutAppend(key string, value string, opName string) {
 	reply := PutAppendReply{}
 	server := ck.leaderId
 	for {
-		Dprintf("[Clerk-%d] call [PutAppend] request key=%s value=%s op=%s, seq=%d, server=%d", ck.clerkId, key, value, opName, args.SeqId, server%len(ck.servers))
+		DPrintf(dLog2, "C%d call [PutAppend] request key=%s value=%s op=%s, seq=%d, server=%d", ck.clerkId, key, value, opName, args.SeqId, server%len(ck.servers))
 		ok := ck.SendPutAppend(server%len(ck.servers), &args, &reply) // 发送 PutAppend 请求给指定的服务器
 		if ok {
 			if reply.Err == ErrWrongLeader { // 如果收到了 ErrWrongLeader 错误，表示当前服务器不是 Leader
 				server += 1
 				time.Sleep(50 * time.Millisecond)
-				Dprintf("[Clerk-%d] call [PutAppend] faild, try next server id =%d ... retry args=%v", ck.clerkId, server, args)
+				DPrintf(dLog2, "C%d call [PutAppend] faild, try next server id =%d ... retry args=%v", ck.clerkId, server, args)
 				continue // 重试下一个服务器
 			}
 			ck.leaderId = server // 更新 Leader 的标识符
-			Dprintf("[Clerk-%d] call [PutAppend] response server=%d, ... reply = %v, args=%v", ck.clerkId, server%len(ck.servers), reply, args)
+			DPrintf(dLog2, "C%d call [PutAppend] response server=%d, ... reply = %v, args=%v", ck.clerkId, server%len(ck.servers), reply, args)
 			break // 获取到响应，退出循环
 		} else {
 			server += 1
-			Dprintf("[Clerk][PutAppend] %d faild, call result=false, try next server id =%d ... retry reply=%v", ck.clerkId, server, reply)
+			DPrintf(dLog2, "C%d call [PutAppend] faild, call result=false, try next server id =%d ... retry reply=%v", ck.clerkId, server, reply)
 		}
 		time.Sleep(50 * time.Millisecond) // 等待一段时间后继续重试
 	}

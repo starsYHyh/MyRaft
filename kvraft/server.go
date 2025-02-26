@@ -1,23 +1,14 @@
 package kvraft
 
 import (
-	"MyRaft/labgob"
-	"MyRaft/labrpc"
 	"MyRaft/raft"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"MyRaft/labgob"
+	"MyRaft/labrpc"
 )
-
-const Debug = false
-
-func Dprintf(format string, a ...interface{}) (n int, err error) {
-	if Debug {
-		log.Printf(format, a...)
-	}
-	return
-}
 
 type Op struct {
 	Key      string // 操作的键名
@@ -93,7 +84,7 @@ func (kv *KVServer) NotifyApplyMsgByCh(ch chan Op, Msg Op) {
 	case ch <- Msg: // 将消息发送到通道
 		return
 	case <-timer.C: // 定时器超时
-		Dprintf("[KVServer-%d] NotifyApplyMsgByCh Msg=%v, timeout", kv.me, Msg) // 打印超时日志
+		DPrintf(dLog, "KVServer%d NotifyApplyMsgByCh Msg=%v, timeout", kv.me, Msg) // 打印超时日志
 		return
 	}
 }
@@ -101,20 +92,20 @@ func (kv *KVServer) NotifyApplyMsgByCh(ch chan Op, Msg Op) {
 func (kv *KVServer) GetCk(ckId int64) *ClerkOps {
 	ck, found := kv.messageMap[ckId] // 根据客户端ID从映射表中获取ClerkOps结构体
 	if !found {                      // 如果未找到对应的ClerkOps结构体
-		ck = new(ClerkOps)                               // 创建一个新的ClerkOps结构体
-		ck.seqId = 0                                     // 将序列号初始化为0
-		ck.getCh = make(chan Op)                         // 创建Get操作的通道
-		ck.putAppendCh = make(chan Op)                   // 创建Put和Append操作的通道
-		kv.messageMap[ckId] = ck                         // 将新创建的ClerkOps结构体添加到映射表中
-		Dprintf("[KVServer-%d] Init ck %d", kv.me, ckId) // 打印日志，表示初始化了新的ClerkOps结构体
+		ck = new(ClerkOps)             // 创建一个新的ClerkOps结构体
+		ck.seqId = 0                   // 将序列号初始化为0
+		ck.getCh = make(chan Op)       // 创建Get操作的通道
+		ck.putAppendCh = make(chan Op) // 创建Put和Append操作的通道
+		kv.messageMap[ckId] = ck       // 将新创建的ClerkOps结构体添加到映射表中
+		DPrintf(dLog, "KVServer%d Init ck %d", kv.me, ckId)
 	}
 	return kv.messageMap[ckId] // 返回对应的ClerkOps结构体
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	kv.mu.Lock()
-	ck := kv.GetCk(args.ClerkId)                              // 获取客户端的ClerkOps结构体
-	Dprintf("[KVServer-%d] Received Req Get %v", kv.me, args) // 打印日志，表示收到Get请求
+	ck := kv.GetCk(args.ClerkId)                    // 获取客户端的ClerkOps结构体
+	DPrintf(dLog, "KVServer%d Get %v", kv.me, args) // 打印日志，表示执行了Get操作
 	// 开始一个命令
 	logIndex, _, isLeader := kv.rf.Start(Op{
 		Key:      args.Key,
@@ -129,14 +120,14 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		kv.mu.Unlock()
 		return
 	}
-	Dprintf("[KVServer-%d] Received Req Get %v, waiting logIndex=%d", kv.me, args, logIndex) // 打印日志，表示等待日志提交
-	ck.msgUniqueId = logIndex                                                                // 将当前命令的日志索引设置为ClerkOps结构体的消息唯一标识符
+	DPrintf(dLog, "KVServer%d Get %v, waiting logIndex=%d", kv.me, args, logIndex) // 打印日志，表示等待日志提交
+	ck.msgUniqueId = logIndex                                                      // 将当前命令的日志索引设置为ClerkOps结构体的消息唯一标识符
 	kv.mu.Unlock()
 	// 解析Op结构体
 	getMsg, err := kv.WaitApplyMsgByCh(ck.getCh, ck) // 等待从通道接收到Get操作的结果
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
-	Dprintf("[KVServer-%d] Received Msg [Get] args=%v, SeqId=%d, Msg=%v", kv.me, args, args.SeqId, getMsg) // 打印日志，表示收到了Get操作的结果
+	DPrintf(dLog, "KVServer%d Recived Msg [Get] from ck.getCh args=%v, SeqId=%d, Msg=%v", kv.me, args, args.SeqId, getMsg) // 打印日志，表示收到了Get操作的结果
 	reply.Err = err
 	if err != OK {
 		// 领导者发生变更，返回ErrWrongLeader错误码
@@ -149,7 +140,7 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		return
 	} else {
 		reply.Value = kv.dataSource[getMsg.Key]
-		Dprintf("[KVServer-%d] Excute Get %s is %s", kv.me, getMsg.Key, reply.Value) // 打印日志，表示执行了Get操作
+		DPrintf(dLog, "KVServer%d Get %v, reply=%v", kv.me, args, reply)
 	}
 }
 
@@ -162,7 +153,7 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		reply.Err = OK // 设置错误码为OK
 		return
 	}
-	Dprintf("[KVServer-%d] Received Req PutAppend %v, SeqId=%d ", kv.me, args, args.SeqId) // 打印日志，表示收到了PutAppend请求
+	DPrintf(dLog, "KVServer%d PutAppend %v", kv.me, args) // 打印日志，表示执行了PutAppend操作
 	// 开始一个命令
 	logIndex, _, isLeader := kv.rf.Start(Op{
 		Key:      args.Key,
@@ -178,33 +169,33 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		return
 	}
 
-	ck.msgUniqueId = logIndex                                                                      // 将当前命令的日志索引设置为ClerkOps结构体的消息唯一标识符
-	Dprintf("[KVServer-%d] Received Req PutAppend %v, waiting logIndex=%d", kv.me, args, logIndex) // 打印日志，表示等待日志提交
+	ck.msgUniqueId = logIndex                                                            // 将当前命令的日志索引设置为ClerkOps结构体的消息唯一标识符
+	DPrintf(dLog, "KVServer%d PutAppend %v, waiting logIndex=%d", kv.me, args, logIndex) // 打印日志，表示等待日志提交
 	kv.mu.Unlock()
 	// 第二步：等待通道
 	reply.Err = OK                                      // 设置错误码为OK
 	Msg, err := kv.WaitApplyMsgByCh(ck.putAppendCh, ck) // 等待从通道接收到PutAppend操作的结果
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
-	Dprintf("[KVServer-%d] Recived Msg [PutAppend] from ck.putAppendCh args=%v, SeqId=%d, Msg=%v", kv.me, args, args.SeqId, Msg) // 打印日志，表示收到了PutAppend操作的结果
+	DPrintf(dLog, "KVServer%d Recived Msg [PutAppend] from ck.putAppendCh args=%v, SeqId=%d, Msg=%v", kv.me, args, args.SeqId, Msg) // 打印日志，表示收到了PutAppend操作的结果
 	reply.Err = err
 	if err != OK {
-		Dprintf("[KVServer-%d] leader change args=%v, SeqId=%d", kv.me, args, args.SeqId) // 打印日志，表示领导者发生了变更
+		DPrintf(dLog, "KVServer%d PutAppend %v, reply=%v", kv.me, args, reply) // 打印日志，表示执行了PutAppend操作
 		return
 	}
 }
 
 func (kv *KVServer) processMsg() {
 	for {
-		applyMsg := <-kv.applyCh                                                    // 从通道接收应用层提交的日志
-		Msg := applyMsg.Command.(Op)                                                // 解析日志中的Op结构体
-		Dprintf("[KVServer-%d] Received Msg from channel. Msg=%v", kv.me, applyMsg) // 打印日志，表示收到了来自通道的日志消息
+		applyMsg := <-kv.applyCh     // 从通道接收应用层提交的日志
+		Msg := applyMsg.Command.(Op) // 解析日志中的Op结构体
 
+		DPrintf(dLog, "KVServer%d Process Msg %v", kv.me, applyMsg) // 打印日志，表示处理日志
 		kv.mu.Lock()
 		ck := kv.GetCk(Msg.ClientId) // 获取客户端的ClerkOps结构体
 		// 当前不处理该日志
 		if Msg.SeqId > ck.seqId { // 如果日志的序列号大于ClerkOps结构体的序列号
-			Dprintf("[KVServer-%d] Ignore Msg %v, Msg.Index > ck.index=%d", kv.me, applyMsg, ck.seqId) // 打印日志，表示忽略该日志
+			DPrintf(dLog, "KVServer%d Ignore Msg %v, Msg.SeqId > ck.seqId", kv.me, applyMsg) // 打印日志，表示忽略该日志
 			kv.mu.Unlock()
 			continue
 		}
@@ -217,26 +208,26 @@ func (kv *KVServer) processMsg() {
 		if Msg.Server == kv.me && isLeader && needNotify { // 如果当前服务器是领导者，并且需要通知客户端
 			// 通知通道并重置时间戳
 			ck.msgUniqueId = 0
-			Dprintf("[KVServer-%d] Process Msg %v finish, ready send to ck.Ch, SeqId=%d isLeader=%v", kv.me, applyMsg, ck.seqId, isLeader) // 打印日志，表示处理完成并准备发送到ClerkOps结构体的通道
-			kv.NotifyApplyMsgByCh(ck.GetCh(Msg.Command), Msg)                                                                              // 通过通道通知客户端
-			Dprintf("[KVServer-%d] Process Msg %v Send to Rpc handler finish SeqId=%d isLeader=%v", kv.me, applyMsg, ck.seqId, isLeader)   // 打印日志，表示发送到Rpc处理程序完成
+			DPrintf(dLog, "KVServer%d Notify Msg %v", kv.me, applyMsg)       // 打印日志，表示通知客户端
+			kv.NotifyApplyMsgByCh(ck.GetCh(Msg.Command), Msg)                // 通过通道通知客户端
+			DPrintf(dLog, "KVServer%d Notify Msg %v, done", kv.me, applyMsg) // 打印日志，表示通知客户端完成
 		}
 
 		if Msg.SeqId < ck.seqId { // 如果日志的序列号小于ClerkOps结构体的序列号
-			Dprintf("[KVServer-%d] Ignore Msg %v,  Msg.SeqId < ck.seqId", kv.me, applyMsg) // 打印日志，表示忽略该日志
+			DPrintf(dLog, "KVServer%d Ignore Msg %v, Msg.SeqId < ck.seqId", kv.me, applyMsg) // 打印日志，表示忽略该日志
 			kv.mu.Unlock()
 			continue
 		}
 
 		switch Msg.Command { // 根据命令类型执行相应的操作
 		case "Put":
-			kv.dataSource[Msg.Key] = Msg.Value                                                                          // 执行Put操作，将键值对写入数据源
-			Dprintf("[KVServer-%d] Excute CkId=%d Put Msg=%v, kvdata=%v", kv.me, Msg.ClientId, applyMsg, kv.dataSource) // 打印日志，表示执行了Put操作
+			kv.dataSource[Msg.Key] = Msg.Value                                                                            // 执行Put操作，将键值对写入数据源
+			DPrintf(dLog, "KVServer%d Excute CkId=%d Put Msg=%v kvdata=%v", kv.me, Msg.ClientId, applyMsg, kv.dataSource) // 打印日志，表示执行了Put操作
 		case "Append":
-			Dprintf("[KVServer-%d] Excute CkId=%d Append Msg=%v kvdata=%v", kv.me, Msg.ClientId, applyMsg, kv.dataSource) // 打印日志，表示执行了Append操作
-			kv.dataSource[Msg.Key] += Msg.Value                                                                           // 执行Append操作，将值追加到键对应的现有值后面
+			DPrintf(dLog, "KVServer%d Excute CkId=%d Append Msg=%v kvdata=%v", kv.me, Msg.ClientId, applyMsg, kv.dataSource) // 打印日志，表示执行了Append操作
+			kv.dataSource[Msg.Key] += Msg.Value                                                                              // 执行Append操作，将值追加到键对应的现有值后面
 		case "Get":
-			Dprintf("[KVServer-%d] Excute CkId=%d Get Msg=%v kvdata=%v", kv.me, Msg.ClientId, applyMsg, kv.dataSource) // 打印日志，表示执行了Get操作
+			DPrintf(dLog, "KVServer%d Excute CkId=%d Get Msg=%v kvdata=%v", kv.me, Msg.ClientId, applyMsg, kv.dataSource) // 打印日志，表示执行了Get操作
 		}
 		ck.seqId = Msg.SeqId + 1 // 更新ClerkOps结构体的序列号
 		kv.mu.Unlock()
@@ -264,7 +255,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.applyCh = make(chan raft.ApplyMsg, 1000)           // 创建一个用于接收raft模块应用层提交的日志的通道
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh) // 创建一个raft对象
 	kv.mu.Lock()
-	Dprintf("Start KVServer-%d", me)
+	DPrintf(dLog, "KVServer%d Start", kv.me)
 	kv.dataSource = make(map[string]string)       // 创建一个用于存储键值对的数据源
 	kv.messageMap = make(map[int64]*ClerkOps)     // 创建一个用于存储客户端操作的消息映射表
 	kv.messageCh = make(chan raft.ApplyMsg, 1000) // 创建一个用于接收raft模块应用层提交的日志的通道
