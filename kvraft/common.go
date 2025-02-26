@@ -9,24 +9,24 @@ const (
 type Err string
 
 type PutAppendArgs struct {
-	Key     string // 键名
-	Value   string // 值
+	Key     string
+	Value   string
 	Op      string // 操作类型（Put 或 Append）
-	ClerkId int64  // 客户端 ID
-	SeqId   int    // 操作序号
+	ClerkId int64
+	SeqNum  int // 操作序号
 }
 
 type PutAppendReply struct {
-	Err Err // 错误类型
+	Err Err
 }
 
 type GetArgs struct {
-	Key     string // 键名
-	ClerkId int64  // 客户端 ID
-	SeqId   int    // 操作序号
+	Key     string
+	ClerkId int64
+	SeqNum  int // 操作序号
 }
 
 type GetReply struct {
-	Err   Err    // 错误类型
-	Value string // 值
+	Err   Err
+	Value string
 }
