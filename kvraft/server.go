@@ -199,7 +199,6 @@ func (kv *KVServer) processMsg() {
 			kv.mu.Unlock()
 			continue
 		}
-
 		_, isLeader := kv.rf.GetState()
 
 		// 检查是否需要通知
