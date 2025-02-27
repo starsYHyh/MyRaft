@@ -10,6 +10,7 @@ import (
 	"MyRaft/labrpc"
 )
 
+// 记录操作，其中包括由哪一个客户端发起，由哪一个KVServer处理，操作的序列号
 type Op struct {
 	Key      string
 	Value    string
@@ -21,20 +22,10 @@ type Op struct {
 
 type ClerkOps struct {
 	seqNum      int     // 客户端当前操作序列号，每个客户端的操作序列号是独立的，以保持客户端自身的一致性
-	getCh       chan Op // Get操作的通道
+	getCh       chan Op // Get操作的通道，用于processMsg()函数处理完日之后将结果放到getCh通道中，与此同时，会在waitApplyMsgByCh()函数中等待getCh通道的返回
 	putAppendCh chan Op // Put和Append操作的通道
+	processCh   chan Op // 用于接收日志处理结果的通道
 	msgUniqueId int     // RPC等待消息的唯一标识符，用于通知客户端，此字段全局唯一
-}
-
-func (ck *ClerkOps) GetCh(command string) chan Op {
-	switch command {
-	case "Put":
-		return ck.putAppendCh
-	case "Append":
-		return ck.putAppendCh
-	default:
-		return ck.getCh
-	}
 }
 
 type KVServer struct {
@@ -89,6 +80,7 @@ func (kv *KVServer) GetCk(ckId int64) *ClerkOps {
 		ck.seqNum = 0                  // 将序列号初始化为0
 		ck.getCh = make(chan Op)       // 创建Get操作的通道
 		ck.putAppendCh = make(chan Op) // 创建Put和Append操作的通道
+		ck.processCh = make(chan Op)   // 创建用于接收日志处理结果的通道
 		kv.opsMap[ckId] = ck           // 将新创建的ClerkOps结构体添加到映射表中
 		DPrintf(dLog, "KVServer%d Init ck %d", kv.me, ckId)
 	}
@@ -118,7 +110,7 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	ck.msgUniqueId = logIndex // 将当前命令的日志索引设置为ClerkOps结构体的消息唯一标识符
 	kv.mu.Unlock()
 	// 解析Op结构体
-	rawMsg, err := kv.WaitApplyMsgByCh(ck.getCh, ck) // 等待从通道接收到Get操作的结果
+	rawMsg, err := kv.WaitApplyMsgByCh(ck.processCh, ck) // 等待从通道接收到Get操作的结果
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 	DPrintf(dLog, "KVServer%d Recived Msg [Get] SeqNum=%d", kv.me, args.SeqNum) // 打印日志，表示收到了Get操作的结果
@@ -167,8 +159,8 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	DPrintf(dLog, "KVServer%d PutAppend %v, waiting logIndex=%d", kv.me, args, logIndex) // 打印日志，表示等待日志提交
 	kv.mu.Unlock()
 	// 第二步：等待通道
-	reply.Err = OK                                      // 设置错误码为OK
-	Msg, err := kv.WaitApplyMsgByCh(ck.putAppendCh, ck) // 等待从通道接收到PutAppend操作的结果
+	reply.Err = OK                                    // 设置错误码为OK
+	Msg, err := kv.WaitApplyMsgByCh(ck.processCh, ck) // 等待从通道接收到PutAppend操作的结果
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 	DPrintf(dLog, "KVServer%d Recived Msg [PutAppend] from ck.putAppendCh args=%v, SeqId=%d, Msg=%v", kv.me, args, args.SeqNum, Msg) // 打印日志，表示收到了PutAppend操作的结果
@@ -202,7 +194,7 @@ func (kv *KVServer) processMsg() {
 			// 避免重复通知的机制是，每次通知后将ck.msgUniqueId重置为0
 			// 且仅在下次客户端发起请求时，才会重新设置ck.msgUniqueId
 			ck.msgUniqueId = 0
-			kv.NotifyApplyMsgByCh(ck.GetCh(Msg.Command), Msg) // 通过通道通知客户端
+			kv.NotifyApplyMsgByCh(ck.processCh, Msg) // 通过通道通知客户端
 		}
 
 		if Msg.SeqNum < ck.seqNum { // 如果日志的序列号小于ClerkOps结构体的序列号
@@ -217,7 +209,6 @@ func (kv *KVServer) processMsg() {
 			kv.data[Msg.Key] = Msg.Value // 执行Put操作，将键值对写入数据源
 		case "Append":
 			kv.data[Msg.Key] += Msg.Value // 执行Append操作，将值追加到键对应的现有值后面
-		case "Get":
 		}
 		ck.seqNum++ // 更新ClerkOps结构体的序列号
 		kv.mu.Unlock()
