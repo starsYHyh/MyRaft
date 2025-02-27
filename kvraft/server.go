@@ -203,16 +203,16 @@ func (kv *KVServer) processMsg() {
 			// 且仅在下次客户端发起请求时，才会重新设置ck.msgUniqueId
 			ck.msgUniqueId = 0
 			kv.NotifyApplyMsgByCh(ck.GetCh(Msg.Command), Msg) // 通过通道通知客户端
-			DPrintf(dLog, "KVServer%d notify done", kv.me)    // 打印日志，表示通知客户端完成
 		}
 
 		if Msg.SeqNum < ck.seqNum { // 如果日志的序列号小于ClerkOps结构体的序列号
-			DPrintf(dLog, "KVServer%d Ignore Msg %v, Msg.SeqId < ck.seqId", kv.me, applyMsg) // 打印日志，表示忽略该日志
+			DPrintf(dLog, "KVServer%d Ignore Msg, Msg.SeqId < ck.seqId", kv.me) // 打印日志，表示忽略该日志
 			kv.mu.Unlock()
 			continue
 		}
 
-		switch Msg.Command { // 根据命令类型执行相应的操作
+		// 与通知客户端的逻辑类似，对应的data也只需要在leader上进行操作
+		switch Msg.Command {
 		case "Put":
 			kv.data[Msg.Key] = Msg.Value // 执行Put操作，将键值对写入数据源
 		case "Append":
