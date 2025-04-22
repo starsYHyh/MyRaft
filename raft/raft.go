@@ -1,25 +1,5 @@
 package raft
 
-//
-// this is an outline of the API that raft must expose to
-// the service (or tester). see comments below for
-// each of these functions for more details.
-//
-// rf = Make(...)
-//   create a new Raft server.
-//   创造一个新的Raft服务器
-// rf.Start(command interface{}) (index, term, isleader)
-//   start agreement on a new log entry
-//   开始对新的日志条目达成一致
-// rf.GetState() (term, isLeader)
-//   ask a Raft for its current term, and whether it thinks it is leader
-//   询问Raft当前的任期，以及它是否认为自己是领导者
-// type ApplyMsg
-//   each time a new entry is committed to the log, each Raft peer
-//   should send an ApplyMsg to the service (or tester)
-//   in the same server.
-//	 每次有新的条目被提交到日志中，每个Raft对等方都应该向服务（或测试人员）发送一个ApplyMsg
-
 import (
 	"MyRaft/labgob"
 	"MyRaft/labrpc"
@@ -59,7 +39,6 @@ const (
 	Leader           // 领导者
 )
 
-// A Go object implementing a single Raft peer.
 type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
 	peers     []*labrpc.ClientEnd // RPC end points of all peers
@@ -76,6 +55,12 @@ type Raft struct {
 	votedFor    int        // 在当前任期内获得投票的候选者的ID（如果没有则为 null）
 	log         []LogEntry // 日志条目集；每个条目包含状态机命令以及领导者收到条目时的任期（第一个索引为 1）
 	recvdIndex  int        // 已知收到的最后一个日志条目的索引，即为日志长度-1，（初始化为 0，单调增加）
+
+	// 为了支持快照，需要持久化其他信息
+	lastIncludedIndex int    // 快照中包含的最后一个日志条目的索引
+	lastIncludedTerm  int    // 快照中包含的最后一个日志条目的任期
+	snapshot          []byte // 快照数据
+	applySnapshotFlag bool   // 是否需要应用快照
 
 	// 所有服务器上的易失性状态
 	commitIndex     int           // 已知已提交的最高日志条目的索引（初始化为 0，单调增加）
@@ -99,8 +84,6 @@ func (rf *Raft) GetState() (int, bool) {
 	return term, isleader
 }
 
-// 将Raft的持久状态保存到稳定存储中，以便在崩溃和重新启动后可以检索。
-// 保存的状态包括当前任期号和已投票的候选者ID。
 func (rf *Raft) persist() {
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
@@ -114,7 +97,7 @@ func (rf *Raft) persist() {
 
 // 从持久化存储中恢复之前的状态
 func (rf *Raft) readPersist(data []byte) {
-	if data == nil || len(data) < 1 { // bootstrap without any state?
+	if data == nil || len(data) < 1 {
 		return
 	}
 	r := bytes.NewBuffer(data)
@@ -123,14 +106,52 @@ func (rf *Raft) readPersist(data []byte) {
 	var votedFor int
 	var log []LogEntry
 	if d.Decode(&currentTerm) != nil || d.Decode(&votedFor) != nil || d.Decode(&log) != nil {
-		// error handling
+		DPrintf(dError, "readPersist error\n")
 	} else {
 		rf.mu.Lock()
 		defer rf.mu.Unlock()
 		rf.currentTerm = currentTerm
 		rf.votedFor = votedFor
 		rf.log = log
-		rf.recvdIndex = len(log) - 1
+	}
+}
+
+func (rf *Raft) persistWithSnapshot() {
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.log)
+	e.Encode(rf.lastIncludedIndex)
+	e.Encode(rf.lastIncludedTerm)
+
+	data := w.Bytes()
+	rf.persister.SaveStateAndSnapshot(data, rf.snapshot)
+}
+
+func (rf *Raft) readPersistWithSnapshot(data []byte, snapshot []byte) {
+	if data == nil || len(data) < 1 {
+		return
+	}
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var currentTerm int
+	var votedFor int
+	var log []LogEntry
+	var lastIncludedIndex int
+	var lastIncludedTerm int
+	if d.Decode(&currentTerm) != nil || d.Decode(&votedFor) != nil || d.Decode(&log) != nil ||
+		d.Decode(&lastIncludedIndex) != nil || d.Decode(&lastIncludedTerm) != nil {
+		DPrintf(dError, "readPersist error\n")
+	} else {
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
+		rf.currentTerm = currentTerm
+		rf.votedFor = votedFor
+		rf.log = log
+		rf.lastIncludedIndex = lastIncludedIndex
+		rf.lastIncludedTerm = lastIncludedTerm
+		rf.snapshot = snapshot
 	}
 }
 
@@ -138,9 +159,12 @@ func (rf *Raft) readPersist(data []byte) {
 func (rf *Raft) resetTime() {
 	rf.updateTime = time.Now()
 	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
 }
 
 // 服务想要切换到快照。只有在Raft没有更多最近的信息时才这样做，因为它在applyCh上通信快照。
+// 以前，本实验建议您实现一个名为 CondInstallSnapshot 的函数，以避免协调在 applyCh 上发送的快照和日志条目的要求。
+// 这个残留的 API 接口仍然存在，但不鼓励您实现它：相反，我们建议您只需让它返回 true。
 func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
 
 	// Your code here (2D).
@@ -148,15 +172,27 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 	return true
 }
 
-// 服务说它已经创建了一个快照，其中包含所有信息，直到包括索引。
 // 这意味着服务不再需要日志通过（包括）该索引。Raft现在应该尽可能地修剪其日志。
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
-
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	// 如果快照的最后一个日志条目的索引大于等于当前接收的快照最后一个日志条目的索引，则不需要处理
+	// 因为已经进行了快照
+	if index <= rf.lastIncludedIndex || index > rf.commitIndex {
+		return
+	}
+	// 更新日志：截断
+	newLastIncludedTerm := rf.getLogEntry(index).Term
+	newLastIncludedIndex := index
+	rf.log = append([]LogEntry{{Term: newLastIncludedTerm, Command: nil}}, rf.getSlicedLog(index+1, -1)...)
+	rf.lastIncludedTerm = newLastIncludedTerm
+	rf.lastIncludedIndex = newLastIncludedIndex
+	rf.snapshot = snapshot
+	rf.persistWithSnapshot()
+	DPrintf(dSnap, "F%d snapshot lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, rf.lastIncludedIndex, rf.lastIncludedTerm)
 }
 
-// RequestVote RPC 参数结构
-// 字段名必须以大写字母开头！
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
 	Term         int // 候选者的任期号
@@ -165,8 +201,6 @@ type RequestVoteArgs struct {
 	LastLogTerm  int //	候选者最后一次日志条目的任期（§5.4）
 }
 
-// RequestVote RPC 回复结构
-// 字段名必须以大写字母开头！
 type RequestVoteReply struct {
 	Term        int  // currentTerm，供候选人自行更新
 	VoteGranted bool // true 表示候选人获得选票
@@ -189,11 +223,18 @@ type AppendEntriesReply struct {
 	XLen    int  // 跟随者的日志长度
 }
 
-// 测试人员在每次测试后不会停止Raft创建的goroutine，但它确实调用了Kill()方法。
-// 您的代码可以使用killed()来检查是否已调用Kill()。使用原子操作避免了锁的需要。
-//
-// 问题是长时间运行的goroutine使用内存，可能会消耗CPU时间，可能导致后续测试失败并生成令人困惑的调试输出。
-// 任何具有长时间运行循环的goroutine都应调用killed()来检查它是否应该停止。
+type InstallSnapshotArgs struct {
+	Term              int    // 领导者的任期号
+	LeaderID          int    // 领导者的ID
+	LastIncludedIndex int    // 快照将替换该索引之前的所有条目（包括该索引）
+	LastIncludedTerm  int    // lastIncludedIndex的任期
+	Data              []byte // 快照数据
+}
+
+type InstallSnapshotReply struct {
+	Term int // currentTerm，用于领导者自我更新
+}
+
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
@@ -204,15 +245,16 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
-func (rf *Raft) setNewTerm(term int) {
+func (rf *Raft) setNewTerm(term int, voteFor int) {
 	rf.currentTerm = term
-	rf.votedFor = -1
+	rf.votedFor = voteFor
 	rf.state = Follower
-	DPrintf(dState, "F%d become follower\n", rf.me)
-	rf.persist()
+	rf.persistWithSnapshot()
 }
 
 // 在ticker中，需要处理两件事
+// 1. 如果是领导者，则发送心跳
+// 2. 如果最近选举超时时间内没有收到心跳，则启动新选举
 // 1. 如果是领导者，则发送心跳
 // 2. 如果最近选举超时时间内没有收到心跳，则启动新选举
 func (rf *Raft) ticker() {
@@ -234,13 +276,6 @@ func (rf *Raft) ticker() {
 	}
 }
 
-// 服务或测试人员想要创建一个Raft服务器。所有Raft服务器（包括这个）的端口都在peers[]中。
-// 该服务器的端口是peers[me]。所有服务器的peers[]数组的顺序相同。
-// persister是这个服务器保存其持久状态的地方，如果有的话，它最初保存了最近保存的状态。
-//
-// applyCh是测试人员或服务期望Raft发送ApplyMsg消息的通道。
-//
-// Make()必须快速返回，因此它应该为任何长时间运行的工作启动goroutine。
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := &Raft{}
@@ -248,27 +283,35 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 
+	rf.log = make([]LogEntry, 1)
+	rf.currentTerm = 0
+	rf.votedFor = -1
+	rf.snapshot = make([]byte, 0)
+	rf.applySnapshotFlag = false
+
+	rf.readPersistWithSnapshot(persister.ReadRaftState(), persister.ReadSnapshot())
+	DPrintf(dSnap, "F%d recover lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, rf.lastIncludedIndex, rf.lastIncludedTerm)
+
 	// 初始化状态
 	rf.state = Follower
 	// 心跳时间，因测试要求每秒不多于10次/秒
 	// 选举超时时间，大于论文中的300ms，且需要随机化
 	rf.heartBeatTime = 120 * time.Millisecond
 	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
+	// 心跳时间，因测试要求每秒不多于10次/秒
+	// 选举超时时间，大于论文中的300ms，且需要随机化
+	rf.heartBeatTime = 120 * time.Millisecond
+	rf.electionTimeout = time.Duration(360+rand.Intn(360)) * time.Millisecond
 	rf.updateTime = time.Now()
-	rf.currentTerm = 0           // 任期号
-	rf.votedFor = -1             // 未投票
-	rf.log = make([]LogEntry, 1) // 索引从1开始
-	rf.log[0] = LogEntry{0, nil} // 第0个日志条目为空
-	rf.commitIndex = 0           // 已知已提交的最高日志条目的索引
-	rf.recvdIndex = 0            // 已知收到的最后一个日志条目的索引
+
+	rf.commitIndex = 0                                     // 已知已提交的最高日志条目的索引
+	rf.recvdIndex = rf.lastIncludedIndex + len(rf.log) - 1 // 已知收到的最后一个日志条目的索引
 
 	rf.nextIndex = make([]int, len(rf.peers))
 	rf.matchIndex = make([]int, len(rf.peers))
 
 	rf.applyCh = applyCh
 	rf.applyCond = sync.NewCond(&rf.mu)
-
-	rf.readPersist(persister.ReadRaftState())
 
 	go rf.ticker()   // 开辟一个goroutine，用于处理心跳和选举
 	go rf.applyLog() // 开辟一个goroutine，用于应用日志

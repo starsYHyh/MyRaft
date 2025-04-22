@@ -19,6 +19,7 @@ func (rf *Raft) leaderElection() {
 	me := rf.me
 	rf.currentTerm++
 	rf.votedFor = me
+	rf.persistWithSnapshot()
 	rf.state = Candidate
 	rf.resetTime() // 重置选举超时计时器
 	// 生成RequestVote RPC参数
@@ -26,9 +27,9 @@ func (rf *Raft) leaderElection() {
 		Term:         rf.currentTerm, // 当前任期
 		CandidateID:  me,
 		LastLogIndex: rf.recvdIndex,
-		LastLogTerm:  rf.log[rf.recvdIndex].Term,
+		LastLogTerm:  rf.getLogEntry(rf.recvdIndex).Term,
 	}
-	DPrintf(dVote, "C%d start election, term is %d and electiontime is %v\n", me, rf.currentTerm, rf.electionTimeout.Milliseconds())
+	DPrintf(dVote, "C%d start election, term is %d\n", me, rf.currentTerm)
 	// 初始化投票控制结构
 	voteCtrl := VoteController{
 		wg:        sync.WaitGroup{},
@@ -58,13 +59,12 @@ func (rf *Raft) voteToSingle(server int, args *RequestVoteArgs, voteCtrl *VoteCo
 	defer voteCtrl.wg.Done()
 	reply := RequestVoteReply{}
 
-	DPrintf(dVote, "C%d send vote ", rf.me)
 	if rf.sendRequestVote(server, args, &reply) {
 		rf.mu.Lock()
 		defer rf.mu.Unlock()
 		// 如果回复的任期大于当前任期，则更新当前任期
 		if reply.Term > rf.currentTerm {
-			rf.setNewTerm(reply.Term)
+			rf.setNewTerm(reply.Term, -1)
 			rf.resetTime()
 			rf.updateTime = time.Now()
 			voteCtrl.voteCh <- false
@@ -112,7 +112,7 @@ func (rf *Raft) waitVoteReply(voteCtrl *VoteController) {
 						rf.nextIndex[i] = rf.recvdIndex + 1
 						rf.matchIndex[i] = 0
 					}
-					rf.recvdIndex = len(rf.log) - 1
+					rf.recvdIndex = rf.lastIncludedIndex + len(rf.log) - 1
 					DPrintf(dState, "C%d become leader\n", rf.me)
 					rf.entriesToAll()
 					rf.mu.Unlock()
@@ -125,9 +125,8 @@ func (rf *Raft) waitVoteReply(voteCtrl *VoteController) {
 					rf.mu.Unlock()
 					return
 				}
-				rf.setNewTerm(rf.currentTerm)
+				rf.setNewTerm(rf.currentTerm, -1)
 				rf.resetTime()
-				DPrintf(dInfo, "F%d electionTimeout is %v\n", rf.me, rf.electionTimeout)
 				rf.mu.Unlock()
 				return
 			}
@@ -137,9 +136,6 @@ func (rf *Raft) waitVoteReply(voteCtrl *VoteController) {
 	}
 }
 
-// 向服务器发送RequestVote RPC，期望arg中的RPC参数，用RPC回复填充*reply，因此调用者应传递&reply。
-// 传递给Call()的args和reply的类型必须与处理程序函数中声明的参数的类型相同（包括它们是否为指针）。
-//
 // labrpc包模拟了一个有丢失的网络，在这个网络中，服务器可能无法访问，请求和回复可能丢失。
 // Call()发送请求并等待回复。如果在超时间隔内收到回复，则Call()返回true；否则Call()返回false。因此，Call()可能一段时间不返回。
 // 一个false返回可能是由于死服务器、无法访问的活服务器、丢失的请求或丢失的回复。
@@ -159,33 +155,35 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	DPrintf(dVote, "F%d receive vote request from C%d\n", rf.me, args.CandidateID)
 	// 如果请求的任期小于当前任期
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
-		DPrintf(dVote, "F%d refuse vote for C%d because of term\n", rf.me, args.CandidateID)
+		// DPrintf(dVote, "F%d refuse vote for C%d because of term\n", rf.me, args.CandidateID)
 		return
 	}
 	// 如果请求的任期大于当前任期
 	if args.Term > rf.currentTerm {
-		rf.setNewTerm(args.Term)
+		rf.setNewTerm(args.Term, -1)
 	}
 
+	recvdTerm := rf.getLogEntry(rf.recvdIndex).Term
 	if (rf.votedFor == -1 || rf.votedFor == args.CandidateID) &&
-		(args.LastLogTerm > rf.log[rf.recvdIndex].Term ||
-			(args.LastLogTerm == rf.log[rf.recvdIndex].Term &&
+		(args.LastLogTerm > recvdTerm ||
+			(args.LastLogTerm == recvdTerm &&
 				args.LastLogIndex >= rf.recvdIndex)) {
 		// 如果 votedFor 为空或为 candidateId，并且候选者的日志至少和接收者一样新
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
+		rf.persistWithSnapshot()
+		// DPrintf(dVote, "F%d vote for C%d because lastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, lastLogIndex is %d, rf.recvdIndex is %d\n",
+		// 	rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
 		rf.updateTime = time.Now()
-		DPrintf(dVote, "F%d vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n", rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
-		rf.persist()
 	} else {
 		reply.VoteGranted = false
 		if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
-			DPrintf(dVote, "F%d refuse vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n", rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
+			// DPrintf(dVote, "F%d refuse vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n",
+			// 	rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
 		}
 	}
 	reply.Term = rf.currentTerm

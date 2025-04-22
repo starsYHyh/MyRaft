@@ -732,7 +732,7 @@ loop:
 	cfg.end()
 }
 
-func ForTestPersist12C(t *testing.T) {
+func TestPersist12C(t *testing.T) {
 	servers := 3
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
@@ -779,11 +779,12 @@ func ForTestPersist12C(t *testing.T) {
 	cfg.end()
 }
 
-func ForTestPersist22C(t *testing.T) {
+func TestPersist22C(t *testing.T) {
 	servers := 5
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
+	DPrintf(dTest, "Test Persist22C: more persistence")
 	cfg.begin("Test (2C): more persistence")
 
 	index := 1
@@ -795,6 +796,7 @@ func ForTestPersist22C(t *testing.T) {
 
 		cfg.disconnect((leader1 + 1) % servers)
 		cfg.disconnect((leader1 + 2) % servers)
+		DPrintf(dLog, "F%d, F%d disconnected", (leader1+1)%servers, (leader1+2)%servers)
 
 		cfg.one(10+index, servers-2, true)
 		index++
@@ -803,21 +805,28 @@ func ForTestPersist22C(t *testing.T) {
 		cfg.disconnect((leader1 + 3) % servers)
 		cfg.disconnect((leader1 + 4) % servers)
 
+		DPrintf(dLog, "F%d, F%d, F%d disconnected", (leader1+0)%servers, (leader1+3)%servers, (leader1+4)%servers)
+
 		cfg.start1((leader1+1)%servers, cfg.applier)
 		cfg.start1((leader1+2)%servers, cfg.applier)
 		cfg.connect((leader1 + 1) % servers)
 		cfg.connect((leader1 + 2) % servers)
+
+		DPrintf(dLog2, "F%d, F%d reconnected", (leader1+1)%servers, (leader1+2)%servers)
 
 		time.Sleep(RaftElectionTimeout)
 
 		cfg.start1((leader1+3)%servers, cfg.applier)
 		cfg.connect((leader1 + 3) % servers)
 
+		DPrintf(dLog2, "F%d reconnected", (leader1+3)%servers)
+
 		cfg.one(10+index, servers-2, true)
 		index++
 
 		cfg.connect((leader1 + 4) % servers)
 		cfg.connect((leader1 + 0) % servers)
+		DPrintf(dLog2, "F%d, F%d reconnected", (leader1+4)%servers, (leader1+0)%servers)
 	}
 
 	cfg.one(1000, servers, true)
@@ -825,11 +834,12 @@ func ForTestPersist22C(t *testing.T) {
 	cfg.end()
 }
 
-func ForTestPersist32C(t *testing.T) {
+func TestPersist32C(t *testing.T) {
 	servers := 3
 	cfg := make_config(t, servers, false, false)
 	defer cfg.cleanup()
 
+	DPrintf(dTest, "Test Persist32C: partitioned leader and one follower crash, leader restarts")
 	cfg.begin("Test (2C): partitioned leader and one follower crash, leader restarts")
 
 	cfg.one(101, 3, true)
@@ -1159,6 +1169,7 @@ func TestUnreliableChurn2C(t *testing.T) {
 const MAXLOGSIZE = 2000
 
 func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash bool) {
+	DPrintf(dTest, name)
 	iters := 30
 	servers := 3
 	cfg := make_config(t, servers, !reliable, true)
@@ -1179,10 +1190,12 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 
 		if disconnect {
 			cfg.disconnect(victim)
+			DPrintf(dLog, "F%d disconnected", victim)
 			cfg.one(rand.Int(), servers-1, true)
 		}
 		if crash {
 			cfg.crash1(victim)
+			DPrintf(dLog, "F%d crashed", victim)
 			cfg.one(rand.Int(), servers-1, true)
 		}
 
@@ -1209,12 +1222,14 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 			// reconnect a follower, who maybe behind and
 			// needs to rceive a snapshot to catch up.
 			cfg.connect(victim)
+			DPrintf(dLog2, "F%d reconnected", victim)
 			cfg.one(rand.Int(), servers, true)
 			leader1 = cfg.checkOneLeader()
 		}
 		if crash {
 			cfg.start1(victim, cfg.applierSnap)
 			cfg.connect(victim)
+			DPrintf(dLog2, "F%d reconnected", victim)
 			cfg.one(rand.Int(), servers, true)
 			leader1 = cfg.checkOneLeader()
 		}
