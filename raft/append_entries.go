@@ -262,29 +262,6 @@ func (rf *Raft) applyLog() {
 	// 而应用的意思是将这个日志条目应用到本地状态机上，例如，实际更改数据库中的value，将这个操作执行
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	// for !rf.killed() {
-	// 	if rf.commitIndex > rf.lastApplied {
-	// 		DPrintf(dInfo, "S%d log is %v\n", rf.me, rf.log)
-	// 		DPrintf(dPersist, "S%d apply log from %d to %d\n", rf.me, rf.lastApplied+1, rf.commitIndex)
-	// 		// 将日志应用到状态机
-	// 		for i := rf.lastApplied + 1; i <= rf.commitIndex && i <= rf.recvdIndex; i++ {
-	// 			command := rf.log[i].Command
-	// 			rf.mu.Unlock()
-	// 			rf.applyCh <- ApplyMsg{
-	// 				CommandValid: true,
-	// 				Command:      command,
-	// 				CommandIndex: i,
-	// 			}
-	// 			rf.mu.Lock()
-	// 		}
-	// 		rf.lastApplied = rf.commitIndex
-	// 	} else {
-	// 		// rf.applyCond.Wait() 调用了 c.L.Unlock() 来释放锁，然后进入等待状态。
-	// 		// 当条件满足时，线程会被唤醒并重新获取锁（通过 c.L.Lock()），然后继续执行。
-	// 		rf.applyCond.Wait()
-	// 	}
-	// }
-
 	for !rf.killed() {
 		if rf.commitIndex > rf.lastApplied && len(rf.log)-1 > rf.lastApplied {
 			// DPrintf(dInfo, "S%d log is %v\n", rf.me, rf.log)
