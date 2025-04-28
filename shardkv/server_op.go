@@ -48,7 +48,6 @@ func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 }
 
 func (kv *ShardKV) waitCommand(clientId int64, commandId int64, method, key, value string, configNum int) (res CommandResult) {
-	kv.log("wait cmd start,clientId：%d,commandId: %d,method: %s,key-value:%s %s,configNum %d", clientId, commandId, method, key, value, configNum)
 	op := Op{
 		ReqId:     nrand(),
 		ClientId:  clientId,
@@ -58,17 +57,15 @@ func (kv *ShardKV) waitCommand(clientId int64, commandId int64, method, key, val
 		ConfigNum: configNum,
 		Value:     value,
 	}
-	index, term, isLeader := kv.rf.Start(op)
+	_, _, isLeader := kv.rf.Start(op)
 	if !isLeader {
 		res.Err = ErrWrongLeader
-		kv.log("wait cmd NOT LEADER.")
 		return
 	}
 	kv.lock("waitCommand")
 	ch := make(chan CommandResult, 1)
 	kv.commandNotifyCh[op.ReqId] = ch
 	kv.unlock("waitCommand")
-	kv.log("wait cmd notify,index: %v,term: %v,op: %+v", index, term, op)
 	t := time.NewTimer(WaitCmdTimeOut)
 	defer t.Stop()
 
@@ -81,7 +78,6 @@ func (kv *ShardKV) waitCommand(clientId int64, commandId int64, method, key, val
 	}
 
 	kv.removeCh(op.ReqId)
-	kv.log("wait cmd end,Op: %+v.res：%+v", op, res)
 	return
 
 }

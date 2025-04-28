@@ -24,49 +24,44 @@ func (kv *ShardKV) getValueByKey(key string) (err Err, value string) {
 	return
 }
 
-// 判断能否执行客户端发来的命令
+// 判断能否执行客户端发来的命令，主要判断是否在当前 config 下，是否在自己的 shard 上
 func (kv *ShardKV) ProcessKeyReady(configNum int, key string) Err {
 	//config不对
 	if configNum == 0 || configNum != kv.config.Num {
-		kv.log("process key ready err config.")
 		return ErrWrongGroup
 	}
 	shardId := key2shard(key)
 	//没有分配该shard
 	if _, ok := kv.meShards[shardId]; !ok {
-		kv.log("process key ready err shard.")
 		return ErrWrongGroup
 	}
 	//正在迁移，这里有优化的空间，如果没有迁移完成，可以直接请求目标节点完成操作并返回，但是这样就太复杂了，这里简略了
 	if _, ok := kv.inputShards[shardId]; ok {
-		kv.log("process key ready err waitShard.")
 		return ErrWrongGroup
 	}
 	return OK
 }
 
-// 应用每一条命令
+// 消费 Raft applyCh，应用各类命令（客户端读写、config 变更、mergeShard、cleanShard）
 func (kv *ShardKV) handleApplyCh() {
 	for {
 		select {
 		case <-kv.stopCh:
-			kv.log("get from stopCh,server-%v stop!", kv.me)
 			return
 		case cmd := <-kv.applyCh:
-			//处理快照命令，读取快照的内容
+			// 处理快照命令，读取快照的内容
 			if cmd.SnapshotValid {
-				kv.log("%v get install sn,%v %v", kv.me, cmd.SnapshotIndex, cmd.SnapshotTerm)
 				kv.lock("waitApplyCh_sn")
 				kv.readPersist(false, cmd.SnapshotTerm, cmd.SnapshotIndex, cmd.Snapshot)
 				kv.unlock("waitApplyCh_sn")
 				continue
 			}
-			//处理普通命令
+			// 处理普通命令
 			if !cmd.CommandValid {
 				continue
 			}
 			cmdIdx := cmd.CommandIndex
-			//处理不同的命令
+			// 处理不同的命令
 			if op, ok := cmd.Command.(Op); ok {
 				kv.handleOpCommand(cmdIdx, op)
 			} else if config, ok := cmd.Command.(shardctrler.Config); ok {
@@ -87,21 +82,21 @@ func (kv *ShardKV) handleApplyCh() {
 
 // 处理get、put、append命令
 func (kv *ShardKV) handleOpCommand(cmdIdx int, op Op) {
-	kv.log("start apply command %v：%+v", cmdIdx, op)
 	kv.lock("handleApplyCh")
 	defer kv.unlock("handleApplyCh")
 	shardId := key2shard(op.Key)
 	if err := kv.ProcessKeyReady(op.ConfigNum, op.Key); err != OK {
+		// 如果不在当前 config 下，或者不在自己的 shard 上，则直接返回错误
 		kv.notifyWaitCommand(op.ReqId, err, "")
 		return
 	}
 	if op.Method == "Get" {
-		//处理读
+		// 处理读，直接从 kv.data 读取并 notify
 		e, v := kv.getValueByKey(op.Key)
 		kv.notifyWaitCommand(op.ReqId, e, v)
 	} else if op.Method == "Put" || op.Method == "Append" {
 		//处理写
-		//判断命令是否重复
+		//判断命令是否重复，判断幂等
 		isRepeated := false
 		if v, ok := kv.lastApplies[shardId][op.ClientId]; ok {
 			if v == op.CommandId {
@@ -136,40 +131,43 @@ func (kv *ShardKV) handleOpCommand(cmdIdx int, op Op) {
 		panic("unknown method " + op.Method)
 	}
 
-	kv.log("apply op: cmdId:%d, op: %+v, data:%v", cmdIdx, op, kv.data[shardId][op.Key])
 	//每应用一条命令，就判断是否进行持久化
 	kv.saveSnapshot(cmdIdx)
 }
 
 // 处理config命令，即更新config
-// 主要是处理meshard、inputshard、outputshard
-func (kv *ShardKV) handleConfigCommand(cmdIdx int, config shardctrler.Config) {
-	kv.log("start handle config %v：%+v", cmdIdx, config)
+// 主要是处理 meshard、inputshard、outputshard
+func (kv *ShardKV) handleConfigCommand(cmdIdx int, newConfig shardctrler.Config) {
 	kv.lock("handleApplyCh")
 	defer kv.unlock("handleApplyCh")
-	if config.Num <= kv.config.Num {
+	if newConfig.Num <= kv.config.Num {
 		kv.saveSnapshot(cmdIdx)
 		return
 	}
 
-	if config.Num != kv.config.Num+1 {
+	if newConfig.Num != kv.config.Num+1 {
 		panic("applyConfig err")
 	}
 
 	oldConfig := kv.config.Copy()
-	outputShards := make([]int, 0, shardctrler.NShards)
-	inputShards := make([]int, 0, shardctrler.NShards)
+	outputShardIds := make([]int, 0, shardctrler.NShards)
+	inputShardIds := make([]int, 0, shardctrler.NShards)
 	meShards := make([]int, 0, shardctrler.NShards)
 
 	for i := 0; i < shardctrler.NShards; i++ {
-		if config.Shards[i] == kv.gid {
+		if newConfig.Shards[i] == kv.gid {
 			meShards = append(meShards, i)
 			if oldConfig.Shards[i] != kv.gid {
-				inputShards = append(inputShards, i)
+				// 对“移入”（config.Shards[i]==gid 且 oldConfig.Shards[i]!=gid）的 shard，
+				// 把 i 加入 inputShards
+				// 即，从新配置开始，本 group 负责这个 shard
+				inputShardIds = append(inputShardIds, i)
 			}
 		} else {
 			if oldConfig.Shards[i] == kv.gid {
-				outputShards = append(outputShards, i)
+				// 对“移出”的 shard，构造 MergeShardData（保存原 shard 数据和 lastApplies），
+				// 存入 outputShards[oldConfig.Num][i]，并清空本地 data/lastApplies
+				outputShardIds = append(outputShardIds, i)
 			}
 		}
 	}
@@ -180,10 +178,10 @@ func (kv *ShardKV) handleConfigCommand(cmdIdx int, config shardctrler.Config) {
 		kv.meShards[shardId] = true
 	}
 
-	//处理移出的shard
-	//保存当前所处配置的所有移除的shard数据
+	// 处理移出的shard
+	// 保存原 shard 数据和 lastApplies
 	d := make(map[int]MergeShardData)
-	for _, shardId := range outputShards {
+	for _, shardId := range outputShardIds {
 		mergeShardData := MergeShardData{
 			ConfigNum:      oldConfig.Num,
 			ShardNum:       shardId,
@@ -191,29 +189,27 @@ func (kv *ShardKV) handleConfigCommand(cmdIdx int, config shardctrler.Config) {
 			CommandIndexes: kv.lastApplies[shardId],
 		}
 		d[shardId] = mergeShardData
-		//初始化数据
+		// 清空数据
 		kv.data[shardId] = make(map[string]string)
 		kv.lastApplies[shardId] = make(map[int64]int64)
 	}
 	kv.outputShards[oldConfig.Num] = d
 
-	//处理移入的shard
+	// 处理移入的shard
 	kv.inputShards = make(map[int]bool)
 	if oldConfig.Num != 0 {
-		for _, shardId := range inputShards {
+		for _, shardId := range inputShardIds {
 			kv.inputShards[shardId] = true
 		}
 	}
 
-	kv.config = config
+	kv.config = newConfig
 	kv.oldConfig = oldConfig
-	kv.log("apply op: cmdId:%d, config:%+v", cmdIdx, config)
 	kv.saveSnapshot(cmdIdx)
 }
 
 // 处理新的shard数据，即input shard
 func (kv *ShardKV) handleMergeShardDataCommand(cmdIdx int, data MergeShardData) {
-	kv.log("start merge Shard Data %v：%+v", cmdIdx, data)
 	kv.lock("handleApplyCh")
 	defer kv.unlock("handleApplyCh")
 	if kv.config.Num != data.ConfigNum+1 {
@@ -235,14 +231,12 @@ func (kv *ShardKV) handleMergeShardDataCommand(cmdIdx int, data MergeShardData) 
 	}
 	delete(kv.inputShards, data.ShardNum)
 
-	kv.log("apply op: cmdId:%d, mergeShardData:%+v", cmdIdx, data)
 	kv.saveSnapshot(cmdIdx)
 	go kv.callPeerCleanShardData(kv.oldConfig, data.ShardNum)
 }
 
 // 处理已经迁移走的shard，即output shard
 func (kv *ShardKV) handleCleanShardDataCommand(cmdIdx int, data CleanShardDataArgs) {
-	kv.log("start clean shard data %v：%+v", cmdIdx, data)
 	kv.lock("handleApplyCh")
 	defer kv.unlock("handleApplyCh")
 	//如果要清除的shard确实是在outputShard中，且没有被清除，则需要清除

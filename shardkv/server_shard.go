@@ -21,8 +21,6 @@ RPC，针对output shard
 */
 //请求获取shard
 func (kv *ShardKV) FetchShardData(args *FetchShardDataArgs, reply *FetchShardDataReply) {
-	kv.log("get req fetchsharddata:args:%+v, reply:%+v", args, reply)
-	defer kv.log("resp fetchsharddata:args:%+v, reply:%+v", args, reply)
 	kv.lock("fetchShardData")
 	defer kv.unlock("fetchShardData")
 
@@ -51,8 +49,6 @@ func (kv *ShardKV) FetchShardData(args *FetchShardDataArgs, reply *FetchShardDat
 
 // 请求清除shard
 func (kv *ShardKV) CleanShardData(args *CleanShardDataArgs, reply *CleanShardDataReply) {
-	kv.log("get req CleanShardData:args:%+v, reply:%+v", args, reply)
-	defer kv.log("resp CleanShardData:args:%+v, reply:%+v", args, reply)
 	kv.lock("cleanShardData")
 
 	//必须是过去的config
@@ -111,7 +107,7 @@ func (kv *ShardKV) CleanShardData(args *CleanShardDataArgs, reply *CleanShardDat
 定时任务，请求input shard
 */
 
-// 定时获取shard
+// 非空的 inputShards 周期性触发向旧主 FetchShardData
 func (kv *ShardKV) fetchShards() {
 	for {
 		select {
@@ -122,6 +118,8 @@ func (kv *ShardKV) fetchShards() {
 			_, isLeader := kv.rf.GetState()
 			if isLeader {
 				kv.lock("pullshards")
+				// 根据 inputShards 中的 shardId 来请求数据
+				// 数据来源于另一个 group 的 outputShards
 				for shardId, _ := range kv.inputShards {
 					//注意要从上一个config中请求shard的源节点
 					go kv.fetchShard(shardId, kv.oldConfig)
@@ -171,7 +169,6 @@ func (kv *ShardKV) fetchShard(shardId int, config shardctrler.Config) {
 							Data:           replyCopy.Data,
 							CommandIndexes: replyCopy.CommandIndexes,
 						}
-						kv.log("pullShard get data:%+v", mergeShardData)
 						kv.unlock("pullShard")
 						kv.rf.Start(mergeShardData)
 						//不管是不是leader都返回

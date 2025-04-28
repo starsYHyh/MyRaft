@@ -129,8 +129,8 @@ type CleanShardDataReply struct {
 
 // 用于存储output shard的数据，以及充当input shard在apply的命令
 type MergeShardData struct {
-	ConfigNum      int
-	ShardNum       int
-	CommandIndexes map[int64]int64 //当前shard的所有客户端的最后一条命令id
-	Data           map[string]string
+	ConfigNum      int               // 当前shard的配置版本
+	ShardNum       int               // 当前shard的shardId
+	CommandIndexes map[int64]int64   // 当前shard的所有客户端的最后一条命令id
+	Data           map[string]string // 当前shard的所有数据
 }

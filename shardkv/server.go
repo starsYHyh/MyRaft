@@ -1,7 +1,6 @@
 package shardkv
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -70,19 +69,15 @@ func (kv *ShardKV) lock(msg string) {
 
 func (kv *ShardKV) unlock(msg string) {
 	kv.lockEndTime = time.Now()
-	duration := kv.lockEndTime.Sub(kv.lockStartTime)
 	kv.lockMsg = ""
 	kv.mu.Unlock()
-	if duration > MaxLockTime {
-		kv.log("lock too long:%s:%s\n", msg, duration)
-	}
 }
 
-func (kv *ShardKV) log(format string, value ...interface{}) {
-	baseMsg := fmt.Sprintf("server me: %d, gid:%d, config:%+v, input:%+v.",
-		kv.me, kv.gid, kv.config, kv.inputShards)
-	DPrintf(baseMsg, format, value)
-}
+// func (kv *ShardKV) log(format string, value ...interface{}) {
+// 	baseMsg := fmt.Sprintf("server me: %d, gid:%d, config:%+v, input:%+v.",
+// 		kv.me, kv.gid, kv.config, kv.inputShards)
+// 	DPrintf(baseMsg, format, value)
+// }
 
 // the tester calls Kill() when a ShardKV instance won't
 // be needed again. you are not required to do anything
@@ -92,13 +87,9 @@ func (kv *ShardKV) Kill() {
 	kv.rf.Kill()
 	// Your code here, if desired.
 	close(kv.stopCh)
-	kv.log("kil kv")
 }
 
-/*
-定时任务
-*/
-
+// Leader 周期性向 shardctrler.Query 获取最新配置，并通过 raft.Start 提交 config 变更命令
 func (kv *ShardKV) pullConfig() {
 	for {
 		select {
@@ -113,20 +104,20 @@ func (kv *ShardKV) pullConfig() {
 			}
 			kv.lock("pullconfig")
 			lastNum := kv.config.Num
-			kv.log("pull config,last: %d", lastNum)
 			kv.unlock("pullconfig")
 
-			config := kv.scc.Query(lastNum + 1)
-			if config.Num == lastNum+1 {
+			// pullConfig 看到 newConfig.Num+1 存在且当前没有待拉取的 inputShards，
+			// 就通过 raft.Start 提交新的 shardctrler.Config
+			// ??? 为什么不是 newConfig.Num + 2 或其他值，因为有可能本 group 断线一部分时间
+			newConfig := kv.scc.Query(lastNum + 1)
+			if newConfig.Num == lastNum+1 {
 				//找到新的config
-				kv.log("pull config,new config：%+v", config)
 				kv.lock("pullconfig")
 				//这一个判断很关键，必须当前shard全部迁移完成才能获取下一个config
-				if len(kv.inputShards) == 0 && kv.config.Num+1 == config.Num {
-					kv.log("pull config,start config：%+v", config)
+				if len(kv.inputShards) == 0 && kv.config.Num+1 == newConfig.Num {
 					kv.unlock("pullconfig")
 					//请求该命令
-					kv.rf.Start(config.Copy())
+					kv.rf.Start(newConfig.Copy())
 				} else {
 					kv.unlock("pullconfig")
 				}

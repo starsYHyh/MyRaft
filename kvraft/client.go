@@ -3,20 +3,24 @@ package kvraft
 import (
 	"MyRaft/labrpc"
 	"crypto/rand"
+	"log"
 	"math/big"
 	"time"
 )
 
-// a个client
-// b个KVServer，负责存储与客户端交接，支持Get、Put、Append操作，向客户端返回键值对的值，向Server发起日志追加
-// b个raft，负责存储日志，向KVServer返回追加结果
+const (
+	ChangeLeaderInterval = time.Millisecond * 20
+)
+
+// 客户端
 type Clerk struct {
-	servers  []*labrpc.ClientEnd
-	leaderID int   // 当前leader的ID
-	clerkID  int64 // clerk的唯一ID
-	seqNum   int   // 请求的序列号
+	servers []*labrpc.ClientEnd
+	// You will have to modify this struct.
+	clientId int64
+	leaderId int
 }
 
+// 用于生成一个随机数，可以生成clientId和commandId
 func nrand() int64 {
 	max := big.NewInt(int64(1) << 62)
 	bigx, _ := rand.Int(rand.Reader, max)
@@ -24,74 +28,124 @@ func nrand() int64 {
 	return x
 }
 
+// 生成一个客户端
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
-	ck := new(Clerk) // 创建一个新的Clerk对象
-	ck.leaderID = 0
+	ck := new(Clerk)
 	ck.servers = servers
-	ck.clerkID = nrand() // 为Clerk对象的clientId字段生成一个随机数
-	ck.seqNum = 0        // 将Clerk对象的seqId字段设置为-1
+	ck.clientId = nrand()
+	// You'll have to add code here.
 	return ck
 }
 
+// fetch the current value for a key.
+// returns "" if the key does not exist.
+// keeps trying forever in the face of all other errors.
+//
+// you can send an RPC with code like this:
+// ok := ck.servers[i].Call("KVServer.Get", &args, &reply)
+//
+// the types of args and reply (including whether they are pointers)
+// must match the declared types of the RPC handler function's
+// arguments. and reply must be passed as a pointer.
+//
+// 根据key获取value
 func (ck *Clerk) Get(key string) string {
+	// You will have to modify this function.
+	//DPrintf("%v client get key：%s.", ck.clientId, key)
 	args := GetArgs{
-		Key:     key,        // 待获取的键值对的键
-		ClerkId: ck.clerkID, // Clerk 的唯一标识符
-		SeqNum:  ck.seqNum,  // 分配的序列号
+		Key:       key,
+		ClientId:  ck.clientId,
+		CommandId: nrand(),
 	}
-
-	reply := GetReply{}
-	leaderID := ck.leaderID
+	leaderId := ck.leaderId
 	for {
-		// DPrintf(dLog2, "C%d call [Get] request key=%s, seq=%d,", ck.clerkID, key, args.SeqNum)
-		if ck.servers[leaderID].Call("KVServer.Get", &args, &reply) {
-			if reply.Err == ErrWrongLeader { // 如果收到了 ErrWrongLeader 错误，表示当前服务器不是 Leader
-				leaderID = (leaderID + 1) % len(ck.servers)
-				// DPrintf(dLog2, "C%d ErrWrongLeader, retry server=%d", ck.clerkID, leaderID%len(ck.servers))
-				continue // 重试下一个服务器
-			}
-			ck.leaderID = leaderID // 更新 Leader 的标识符
-			ck.seqNum++
-			// DPrintf(dLog2, "C%d call [Get] response server=%d reply=%v", ck.clerkID, leaderID%len(ck.servers), reply.Err)
-			break // 获取到响应，退出循环
-		} else {
-			leaderID = (leaderID + 1) % len(ck.servers)
-			// DPrintf(dLog2, "C%d call [Get] faild, try next server id =%d", ck.clerkID, leaderID)
+		reply := GetReply{}
+		ok := ck.servers[leaderId].Call("KVServer.Get", &args, &reply)
+		if !ok {
+			//如果请求失败，等一段时间再请求,换一个节点再请求
+			DPrintf("%v client get key %v from server %v,not ok.", ck.clientId, key, leaderId)
+			time.Sleep(ChangeLeaderInterval)
+			leaderId = (leaderId + 1) % len(ck.servers)
+			continue
+		} else if reply.Err != OK {
+			DPrintf("%v client get key %v from server %v,reply err = %v!", ck.clientId, key, leaderId, reply.Err)
 		}
-		time.Sleep(50 * time.Millisecond) // 等待一段时间后继续重试
-	}
 
-	return reply.Value // 返回获取到的键值对的值
+		switch reply.Err {
+		case OK:
+			DPrintf("%v client get key %v from server %v,value: %v，OK.", ck.clientId, key, leaderId, reply.Value, leaderId)
+			ck.leaderId = leaderId
+			return reply.Value
+		case ErrNoKey:
+			DPrintf("%v client get key %v from server %v,NO KEY!", ck.clientId, key, leaderId)
+			ck.leaderId = leaderId
+			return ""
+		case ErrTimeOut:
+			continue
+		default:
+			time.Sleep(ChangeLeaderInterval)
+			leaderId = (leaderId + 1) % len(ck.servers)
+			continue
+		}
+
+	}
 }
 
-func (ck *Clerk) PutAppend(key string, value string, opName string) {
+// shared by Put and Append.
+//
+// you can send an RPC with code like this:
+// ok := ck.servers[i].Call("KVServer.PutAppend", &args, &reply)
+//
+// the types of args and reply (including whether they are pointers)
+// must match the declared types of the RPC handler function's
+// arguments. and reply must be passed as a pointer.
+func (ck *Clerk) PutAppend(key string, value string, op string) {
+	DPrintf("%v client PutAppend,key：%v,value：%v,op：%v", ck.clientId, key, value, op)
+	// You will have to modify this function.
 	args := PutAppendArgs{
-		Key:     key,
-		Value:   value,
-		Op:      opName,     // 操作类型，可以是 "Put" 或 "Append"
-		ClerkId: ck.clerkID, // Clerk 的唯一标识符
-		SeqNum:  ck.seqNum,  // 分配的序列号
+		Key:       key,
+		Value:     value,
+		Op:        op,
+		ClientId:  ck.clientId,
+		CommandId: nrand(),
 	}
-	reply := PutAppendReply{}
-	leaderID := ck.leaderID
+	leaderId := ck.leaderId
 	for {
-		// DPrintf(dLog2, "C%d call [PutAppend] request key=%s value=%s op=%s, seq=%d, server=%d", ck.clerkID, key, value, opName, args.SeqNum, leaderID%len(ck.servers))
-		if ck.servers[leaderID].Call("KVServer.PutAppend", &args, &reply) {
-			if reply.Err == ErrWrongLeader { // 如果收到了 ErrWrongLeader 错误，表示当前服务器不是 Leader
-				leaderID = (leaderID + 1) % len(ck.servers)
-				time.Sleep(50 * time.Millisecond)
-				DPrintf(dLog2, "C%d call [PutAppend] faild, try next server id =%d", ck.clerkID, leaderID)
-				continue // 重试下一个服务器
-			}
-			ck.leaderID = leaderID // 更新 Leader 的标识符
-			ck.seqNum++
-			// DPrintf(dLog2, "C%d call [PutAppend] response server=%d, reply = %v", ck.clerkID, leaderID%len(ck.servers), reply.Err)
-			break // 获取到响应，退出循环
-		} else {
-			leaderID = (leaderID + 1) % len(ck.servers)
-			// DPrintf(dLog2, "C%d call [PutAppend] faild, try next server id =%d", ck.clerkID, leaderID)
+		reply := PutAppendReply{}
+		ok := ck.servers[leaderId].Call("KVServer.PutAppend", &args, &reply)
+		if !ok {
+			//可能当前请求的server不是leader，换一个server再访问
+			DPrintf("%v client set key %v to %v to server %v,not ok.", ck.clientId, key, value, leaderId)
+			time.Sleep(ChangeLeaderInterval)
+			leaderId = (leaderId + 1) % len(ck.servers)
+			continue
+		} else if reply.Err != OK {
+			DPrintf("%v client set key %v to %v to server %v,reply err = %v!", ck.clientId, key, value, leaderId, reply.Err)
 		}
-		time.Sleep(50 * time.Millisecond) // 等待一段时间后继续重试
+
+		switch reply.Err {
+		case OK:
+			DPrintf("%v client set key %v to %v to server %v，OK.", ck.clientId, key, value, leaderId)
+			ck.leaderId = leaderId
+			return
+		case ErrNoKey:
+			DPrintf("%v client set key %v to %v to server %v，NOKEY!", ck.clientId, key, value, leaderId)
+			return
+		case ErrTimeOut:
+			continue
+		case ErrWrongLeader:
+			//换一个节点继续请求
+			time.Sleep(ChangeLeaderInterval)
+			leaderId = (leaderId + 1) % len(ck.servers)
+			continue
+		case ErrServer:
+			//换一个节点继续请求
+			time.Sleep(ChangeLeaderInterval)
+			leaderId = (leaderId + 1) % len(ck.servers)
+			continue
+		default:
+			log.Fatal("client rev unknown err", reply.Err)
+		}
 	}
 }
 

@@ -3,48 +3,33 @@ package kvraft
 import (
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"time"
 )
 
 // Debugging
-const debugMode = true
+const Debug = false
 
-type logTopic string
-
-const (
-	dClient  logTopic = "CLNT"
-	dCommit  logTopic = "CMIT"
-	dDrop    logTopic = "DROP"
-	dError   logTopic = "ERRO"
-	dInfo    logTopic = "INFO"
-	dLeader  logTopic = "LEAD"
-	dLog     logTopic = "LOG1"
-	dLog2    logTopic = "LOG2"
-	dPersist logTopic = "PERS"
-	dSnap    logTopic = "SNAP"
-	dTerm    logTopic = "TERM"
-	dTest    logTopic = "TEST"
-	dTimer   logTopic = "TIMR"
-	dTrace   logTopic = "TRCE"
-	dVote    logTopic = "VOTE"
-	dWarn    logTopic = "WARN"
-	dState   logTopic = "STAT"
-)
-
-var debugStart time.Time
+var file *os.File
 
 func init() {
-	debugStart = time.Now()
-
-	log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
+	f, err := os.Create("./tmp/log-" + strconv.Itoa(int(time.Now().Unix())) + ".txt")
+	if err != nil {
+		DPrintf("log create file fail!")
+		fmt.Println("log create file fail!")
+	}
+	file = f
 }
 
-func DPrintf(topic logTopic, format string, a ...interface{}) {
-	if debugMode {
-		// 毫秒级别的时间戳
-		time := time.Since(debugStart).Milliseconds()
-		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
-		format = prefix + format
-		log.Printf(format, a...)
+//debug下打印日志
+func DPrintf(format string, value ...interface{}) {
+	now := time.Now()
+	info := fmt.Sprintf("%v-%v-%v %v:%v:%v:  ", now.Year(), int(now.Month()), now.Day(), now.Hour(), now.Minute(), now.Second()) + fmt.Sprintf(format+"\n", value...)
+
+	if Debug {
+		log.Printf(info)
+	} else {
+		file.WriteString(info)
 	}
 }
