@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-const Debug = false
-
 type Result struct {
 	opType string
 	value  string
@@ -29,14 +27,14 @@ type KVServer struct {
 	mu      sync.Mutex
 	me      int
 	rf      *raft.Raft
-	applyCh chan raft.ApplyMsg // leader->kvserver
+	applyCh chan raft.ApplyMsg // leader->kvserver，用于接收日志，是底层leader到本KVserver的通道
 	dead    int32              // set by Kill()
 
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
 	data      map[string]string // 存储键值对
-	processCh chan Result
+	processCh chan Result       // 用于存储processLogEntry操作的传递给通道的值，是KVServer内部的一个通道
 }
 
 func (kv *KVServer) processLogEntry() {
