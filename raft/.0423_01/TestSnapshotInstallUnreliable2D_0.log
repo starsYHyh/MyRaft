@@ -1,0 +1,78 @@
+000000 TEST Test (2D): install snapshots (disconnect+unreliable)
+000000 SNAP F0 recover lastIncludedIndex 0, lastIncludedTerm 0
+000001 SNAP F1 recover lastIncludedIndex 0, lastIncludedTerm 0
+000001 SNAP F2 recover lastIncludedIndex 0, lastIncludedTerm 0
+Test (2D): install snapshots (disconnect+unreliable) ...
+000726 VOTE C2 start election, term is 1
+000726 VOTE C0 start election, term is 1
+000726 VOTE C1 start election, term is 1
+ClientEnd.Call(): server failed to reply
+001212 VOTE C0 start election, term is 2
+001212 VOTE C1 start election, term is 2
+001213 VOTE C2 start election, term is 2
+ClientEnd.Call(): server failed to reply
+ClientEnd.Call(): server failed to reply
+001818 VOTE C2 start election, term is 3
+001818 VOTE C1 start election, term is 3
+001826 STAT C1 become leader
+001850 INFO F2 update recvdIndex from 0 to 1
+001850 INFO L1 update F2 nextIndex from 1 to 2
+001850 CMIT L1 commit success, commitIndex from 0 to 1
+001860 INFO F0 update recvdIndex from 0 to 1
+001860 INFO L1 update F0 nextIndex from 1 to 2
+ClientEnd.Call(): server failed to reply
+001949 CMIT F2 commitIndex from 1 to 1, recvdIndex 1
+002078 CMIT F0 commitIndex from 1 to 1, recvdIndex 1
+ClientEnd.Call(): server failed to reply
+002638 LOG1 F2 disconnected
+002665 INFO F0 update recvdIndex from 1 to 2
+002665 INFO L1 update F0 nextIndex from 2 to 3
+002665 CMIT L1 commit success, commitIndex from 1 to 2
+002668 CMIT F0 commitIndex from 2 to 2, recvdIndex 2
+002683 INFO F0 update recvdIndex from 2 to 6
+002684 INFO F0 update recvdIndex from 6 to 11
+002685 INFO L1 update F0 nextIndex from 3 to 7
+002685 INFO L1 update F0 nextIndex from 7 to 12
+002685 CMIT L1 commit success, commitIndex from 2 to 11
+002687 SNAP F1 snapshot lastIncludedIndex 9, lastIncludedTerm 3
+002687 INFO F0 update recvdIndex from 11 to 12
+002687 INFO L1 update F0 nextIndex from 12 to 13
+002687 CMIT L1 commit success, commitIndex from 11 to 12
+002688 INFO F0 update recvdIndex from 12 to 3
+002689 INFO L1 update F0 nextIndex from 13 to 4
+002689 INFO F0 update recvdIndex from 3 to 8
+002689 INFO L1 update F0 nextIndex from 4 to 9
+ClientEnd.Call(): server failed to reply
+002690 INFO F0 update recvdIndex from 8 to 9
+002690 INFO L1 update F0 nextIndex from 9 to 10
+002696 INFO F0 update recvdIndex from 9 to 4
+002696 INFO F0 update recvdIndex from 4 to 14
+002696 INFO L1 update F0 nextIndex from 10 to 5
+002697 INFO L1 update F0 nextIndex from 5 to 15
+002697 CMIT L1 commit success, commitIndex from 12 to 14
+002702 INFO F0 update recvdIndex from 14 to 15
+002702 CMIT F0 commitIndex from 11 to 11, recvdIndex 15
+002702 INFO L1 update F0 nextIndex from 15 to 16
+002702 CMIT L1 commit success, commitIndex from 14 to 15
+002702 SNAP F0 snapshot lastIncludedIndex 9, lastIncludedTerm 3
+ClientEnd.Call(): server failed to reply
+002705 ERRO F0 entries length error, prevLogIndex 2, lastIncludedIndex 9, entries length 5
+panic: runtime error: index out of range [6] with length 5
+
+goroutine 205 [running]:
+MyRaft/raft.(*Raft).AppendEntries(0xc000214120, 0xc0003b8380, 0xc0003a2f60)
+	/home/firefly/Codes/go/myraft/raft/append_entries.go:250 +0x14e5
+reflect.Value.call({0xc000188500?, 0xc00019c468?, 0xc0003a2f60?}, {0x79bfa4, 0x4}, {0xc0003c3c38, 0x3, 0x16?})
+	/usr/local/go/src/reflect/value.go:596 +0xd5d
+reflect.Value.Call({0xc000188500?, 0xc00019c468?, 0xc0003ac490?}, {0xc0003c3c38, 0x3, 0x3})
+	/usr/local/go/src/reflect/value.go:380 +0xb6
+MyRaft/labrpc.(*Service).dispatch(0xc0001ad580, {0x79fa47, 0xd}, {{0x74ed40, 0xc00019b4a0}, {0x79fa42, 0x12}, {0x806a40, 0x746b80}, {0xc0000fe600, ...}, ...})
+	/home/firefly/Codes/go/myraft/labrpc/labrpc.go:497 +0x525
+MyRaft/labrpc.(*Server).dispatch(0xc0001bc690, {{0x74ed40, 0xc00019b4a0}, {0x79fa42, 0x12}, {0x806a40, 0x746b80}, {0xc0000fe600, 0x122, 0x200}, ...})
+	/home/firefly/Codes/go/myraft/labrpc/labrpc.go:421 +0x24f
+MyRaft/labrpc.(*Network).processReq.func1()
+	/home/firefly/Codes/go/myraft/labrpc/labrpc.go:243 +0x9d
+created by MyRaft/labrpc.(*Network).processReq in goroutine 196
+	/home/firefly/Codes/go/myraft/labrpc/labrpc.go:242 +0x28b
+exit status 2
+FAIL	MyRaft/raft	2.718s

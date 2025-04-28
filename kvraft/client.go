@@ -7,12 +7,14 @@ import (
 	"time"
 )
 
+// a个client
+// b个KVServer，负责存储键值对，支持Get、Put、Append操作，向客户端返回键值对的值，向Server发起日志追加
+// c个raft，其中只有一个是leader，负责存储日志，向KVServer返回追加结果
 type Clerk struct {
-	servers []*labrpc.ClientEnd
-	// You will have to modify this struct.
-	leaderID    int
-	clientID    int64
-	sequenceNum int
+	servers  []*labrpc.ClientEnd
+	leaderID int   // 当前leader的ID
+	clerkID  int64 // clerk的唯一ID
+	seqNum   int   // 请求的序列号
 }
 
 func nrand() int64 {
@@ -23,92 +25,73 @@ func nrand() int64 {
 }
 
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
-	ck := new(Clerk)
+	ck := new(Clerk) // 创建一个新的Clerk对象
 	ck.leaderID = 0
-	ck.clientID = nrand() // 为Clerk对象的clientId字段生成一个随机数
-	ck.sequenceNum = -1
 	ck.servers = servers
-	// You'll have to add code here.
+	ck.clerkID = nrand() // 为Clerk对象的clientId字段生成一个随机数
+	ck.seqNum = 0        // 将Clerk对象的seqId字段设置为-1
 	return ck
 }
 
-func (ck *Clerk) updateSequenceNum() int {
-	ck.sequenceNum++
-	return ck.sequenceNum
-}
-
-// fetch the current value for a key.
-// returns "" if the key does not exist.
-// keeps trying forever in the face of all other errors.
-//
-// you can send an RPC with code like this:
-// ok := ck.servers[i].Call("KVServer.Get", &args, &reply)
 func (ck *Clerk) Get(key string) string {
 	args := GetArgs{
-		Key:         key,
-		ClientID:    ck.clientID,
-		SequenceNum: ck.updateSequenceNum(),
-	}
-	reply := GetReply{
-		Err:   "",
-		Value: "",
+		Key:     key,        // 待获取的键值对的键
+		ClerkId: ck.clerkID, // Clerk 的唯一标识符
+		SeqNum:  ck.seqNum,  // 分配的序列号
 	}
 
+	reply := GetReply{}
+	leaderID := ck.leaderID
 	for {
-		server := ck.servers[ck.leaderID]
-		DPrintf(dClient, "C%d: server %v, key %v, clientID %v, sequenceNum %v\n", ck.clientID, ck.leaderID, key, ck.clientID, args.SequenceNum)
-		ok := server.Call("KVServer.Get", &args, &reply)
-		if ok {
-			if reply.Err == OK {
-				break
-			} else if reply.Err == ErrWrongLeader {
-				// 如果返回的错误是ErrWrongLeader，那么就更新leaderID，然后继续尝试
-				ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
-			} else {
-				// 如果返回的错误是ErrNoKey，那么就说明key不存在，直接返回空字符串
-				return ""
+		DPrintf(dLog2, "C%d call [Get] request key=%s, seq=%d,", ck.clerkID, key, args.SeqNum)
+		if ck.servers[leaderID].Call("KVServer.Get", &args, &reply) {
+			if reply.Err == ErrWrongLeader { // 如果收到了 ErrWrongLeader 错误，表示当前服务器不是 Leader
+				leaderID = (leaderID + 1) % len(ck.servers)
+				DPrintf(dLog2, "C%d ErrWrongLeader, retry server=%d", ck.clerkID, leaderID%len(ck.servers))
+				continue // 重试下一个服务器
 			}
+			ck.leaderID = leaderID // 更新 Leader 的标识符
+			ck.seqNum++
+			DPrintf(dLog2, "C%d call [Get] response server=%d reply=%v", ck.clerkID, leaderID%len(ck.servers), reply.Err)
+			break // 获取到响应，退出循环
 		} else {
-			// 如果RPC调用失败，那么也更新leaderID，然后继续尝试
-			ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
+			leaderID = (leaderID + 1) % len(ck.servers)
+			DPrintf(dLog2, "C%d call [Get] faild, try next server id =%d", ck.clerkID, leaderID)
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond) // 等待一段时间后继续重试
 	}
-	return reply.Value
+
+	return reply.Value // 返回获取到的键值对的值
 }
 
-// shared by Put and Append.
-//
-// you can send an RPC with code like this:
-// ok := ck.servers[i].Call("KVServer.PutAppend", &args, &reply)
-func (ck *Clerk) PutAppend(key string, value string, op string) {
-	// You will have to modify this function.
+func (ck *Clerk) PutAppend(key string, value string, opName string) {
 	args := PutAppendArgs{
-		Key:         key,
-		Value:       value,
-		Op:          op,
-		ClientID:    ck.clientID,
-		SequenceNum: ck.updateSequenceNum(),
+		Key:     key,
+		Value:   value,
+		Op:      opName,     // 操作类型，可以是 "Put" 或 "Append"
+		ClerkId: ck.clerkID, // Clerk 的唯一标识符
+		SeqNum:  ck.seqNum,  // 分配的序列号
 	}
-
-	reply := PutAppendReply{
-		Err: "",
-	}
+	reply := PutAppendReply{}
+	leaderID := ck.leaderID
 	for {
-		server := ck.servers[ck.leaderID]
-		DPrintf(dClient, "C%d: server %v, key %v, value %v, op %v, clientID %v, sequenceNum %v\n", ck.clientID, ck.leaderID, key, value, op, ck.clientID, args.SequenceNum)
-		ok := server.Call("KVServer.PutAppend", &args, &reply)
-		if ok {
-			DPrintf(dClient, "C%d: PutAppend reply %v\n", ck.clientID, reply.Err)
-			if reply.Err == OK {
-				break
-			} else if reply.Err == ErrWrongLeader {
-				ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
+		DPrintf(dLog2, "C%d call [PutAppend] request key=%s value=%s op=%s, seq=%d, server=%d", ck.clerkID, key, value, opName, args.SeqNum, leaderID%len(ck.servers))
+		if ck.servers[leaderID].Call("KVServer.PutAppend", &args, &reply) {
+			if reply.Err == ErrWrongLeader { // 如果收到了 ErrWrongLeader 错误，表示当前服务器不是 Leader
+				leaderID = (leaderID + 1) % len(ck.servers)
+				time.Sleep(50 * time.Millisecond)
+				DPrintf(dLog2, "C%d call [PutAppend] faild, try next server id =%d", ck.clerkID, leaderID)
+				continue // 重试下一个服务器
 			}
+			ck.leaderID = leaderID // 更新 Leader 的标识符
+			ck.seqNum++
+			DPrintf(dLog2, "C%d call [PutAppend] response server=%d, reply = %v", ck.clerkID, leaderID%len(ck.servers), reply.Err)
+			break // 获取到响应，退出循环
 		} else {
-			ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
+			leaderID = (leaderID + 1) % len(ck.servers)
+			DPrintf(dLog2, "C%d call [PutAppend] faild, try next server id =%d", ck.clerkID, leaderID)
 		}
-		time.Sleep(60 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond) // 等待一段时间后继续重试
 	}
 }
 
