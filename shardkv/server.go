@@ -73,12 +73,6 @@ func (kv *ShardKV) unlock(msg string) {
 	kv.mu.Unlock()
 }
 
-// func (kv *ShardKV) log(format string, value ...interface{}) {
-// 	baseMsg := fmt.Sprintf("server me: %d, gid:%d, config:%+v, input:%+v.",
-// 		kv.me, kv.gid, kv.config, kv.inputShards)
-// 	DPrintf(baseMsg, format, value)
-// }
-
 // the tester calls Kill() when a ShardKV instance won't
 // be needed again. you are not required to do anything
 // in Kill(), but it might be convenient to (for example)
@@ -109,11 +103,12 @@ func (kv *ShardKV) pullConfig() {
 			// pullConfig 看到 newConfig.Num+1 存在且当前没有待拉取的 inputShards，
 			// 就通过 raft.Start 提交新的 shardctrler.Config
 			// ??? 为什么不是 newConfig.Num + 2 或其他值，因为有可能本 group 断线一部分时间
+			// 配置号必须连续递增
 			newConfig := kv.scc.Query(lastNum + 1)
 			if newConfig.Num == lastNum+1 {
-				//找到新的config
+				// 找到新的config
 				kv.lock("pullconfig")
-				//这一个判断很关键，必须当前shard全部迁移完成才能获取下一个config
+				// 这一个判断很关键，必须当前shard全部迁移完成才能获取下一个 config
 				if len(kv.inputShards) == 0 && kv.config.Num+1 == newConfig.Num {
 					kv.unlock("pullconfig")
 					//请求该命令

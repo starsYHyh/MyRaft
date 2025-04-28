@@ -65,8 +65,15 @@ func (kv *ShardKV) handleApplyCh() {
 			if op, ok := cmd.Command.(Op); ok {
 				kv.handleOpCommand(cmdIdx, op)
 			} else if config, ok := cmd.Command.(shardctrler.Config); ok {
+				// pullConfig --> Start(config) --> HandleApplyCh
+				// 	--> handleConfigCommand --> 保存 outputShards和 inputShards
 				kv.handleConfigCommand(cmdIdx, config)
 			} else if mergeData, ok := cmd.Command.(MergeShardData); ok {
+				// fetchShards() --> fetchShard() --> FetchShardData 获得新增的部分
+				// 	--> Start(mergeData) --> HandleApplyCh
+				// 	--> handleMergeShardDataCommand --> 保存 inputShards
+				// 	--> callPeerCleanShardData --> CleanShardData --> HandleApplyCh
+				// 	--> handleCleanShardDataCommand --> 清除outputShards
 				kv.handleMergeShardDataCommand(cmdIdx, mergeData)
 			} else if cleanData, ok := cmd.Command.(CleanShardDataArgs); ok {
 				kv.handleCleanShardDataCommand(cmdIdx, cleanData)
@@ -232,6 +239,7 @@ func (kv *ShardKV) handleMergeShardDataCommand(cmdIdx int, data MergeShardData) 
 	delete(kv.inputShards, data.ShardNum)
 
 	kv.saveSnapshot(cmdIdx)
+	// 通知源节点可以清理该分片
 	go kv.callPeerCleanShardData(kv.oldConfig, data.ShardNum)
 }
 

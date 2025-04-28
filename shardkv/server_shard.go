@@ -24,7 +24,7 @@ func (kv *ShardKV) FetchShardData(args *FetchShardDataArgs, reply *FetchShardDat
 	kv.lock("fetchShardData")
 	defer kv.unlock("fetchShardData")
 
-	//必须是过去的config
+	// 必须是过去的config
 	if args.ConfigNum >= kv.config.Num {
 		return
 	}
@@ -43,8 +43,6 @@ func (kv *ShardKV) FetchShardData(args *FetchShardDataArgs, reply *FetchShardDat
 			}
 		}
 	}
-	return
-
 }
 
 // 请求清除shard
@@ -99,8 +97,6 @@ func (kv *ShardKV) CleanShardData(args *CleanShardDataArgs, reply *CleanShardDat
 	//if !exist {
 	//	reply.Success = true
 	//}
-	return
-
 }
 
 /*
@@ -121,7 +117,7 @@ func (kv *ShardKV) fetchShards() {
 				// 根据 inputShards 中的 shardId 来请求数据
 				// 数据来源于另一个 group 的 outputShards
 				for shardId, _ := range kv.inputShards {
-					//注意要从上一个config中请求shard的源节点
+					// 注意要从上一个 config 中请求 shard 的源节点
 					go kv.fetchShard(shardId, kv.oldConfig)
 				}
 				kv.unlock("pullshards")
@@ -217,7 +213,7 @@ func (kv *ShardKV) callPeerCleanShardData(config shardctrler.Config, shardId int
 				return
 			case <-t.C:
 			case isDone := <-done:
-				if isDone && reply.Success == true {
+				if isDone && reply.Success {
 					return
 				}
 			}
