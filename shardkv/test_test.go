@@ -31,6 +31,7 @@ func TestStaticShards(t *testing.T) {
 
 	ck := cfg.makeClient()
 
+	//每一个组三个节点，这里加入了0，1,
 	cfg.join(0)
 	cfg.join(1)
 
@@ -499,10 +500,13 @@ func TestConcurrent3(t *testing.T) {
 		cfg.StartGroup(1)
 		cfg.StartGroup(2)
 
+		DPrintf("", "全部重启")
+
 		time.Sleep(time.Duration(rand.Int()%900) * time.Millisecond)
 		cfg.leave(1)
 		cfg.leave(2)
 		time.Sleep(time.Duration(rand.Int()%900) * time.Millisecond)
+		DPrintf("", "离开两个")
 	}
 
 	time.Sleep(2 * time.Second)

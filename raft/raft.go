@@ -59,12 +59,14 @@ type Raft struct {
 	recvdIndex  int        // 已知收到的最后一个日志条目的索引，即为日志长度-1，（初始化为 0，单调增加）
 
 	// 为了支持快照，需要持久化其他信息
+
 	lastIncludedIndex int    // 快照中包含的最后一个日志条目的索引
 	lastIncludedTerm  int    // 快照中包含的最后一个日志条目的任期
 	snapshot          []byte // 快照数据
 	applySnapshotFlag bool   // 是否需要应用快照
 
 	// 所有服务器上的易失性状态
+
 	commitIndex     int           // 已知已提交的最高日志条目的索引（初始化为 0，单调增加）
 	lastApplied     int           // 应用于状态机的最高日志条目的索引（初始化为 0，单调增加）
 	state           int           // 服务器的状态（跟随者、候选人、领导者）
@@ -72,6 +74,7 @@ type Raft struct {
 	electionTimeout time.Duration // 选举超时时间
 
 	// 领导者服务器上的易失状态（选举后重新初始化）
+
 	nextIndex     []int         // 对于每个服务器，发送到该服务器的下一个日志条目的索引（初始化为领导者最后一个日志索引 + 1）
 	matchIndex    []int         // 对于每个服务器，已知在服务器上复制的最高日志条目的索引（初始化为 0，单调增加）
 	heartBeatTime time.Duration // 心跳超时时间
@@ -251,7 +254,7 @@ func (rf *Raft) setNewTerm(term int, voteFor int) {
 	rf.currentTerm = term
 	rf.votedFor = voteFor
 	rf.state = Follower
-	rf.persistWithSnapshot()
+	// rf.persistWithSnapshot()
 }
 
 // 在ticker中，需要处理两件事

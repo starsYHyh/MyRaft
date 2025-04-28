@@ -1,5 +1,9 @@
 package shardctrler
 
+import (
+	"MyRaft/labgob"
+)
+
 //
 // Shard controler: assigns shards to replication groups.
 //
@@ -17,25 +21,49 @@ package shardctrler
 // You will need to add fields to the RPC argument structs.
 //
 
+type Err string
+
 // The number of shards.
 const NShards = 10
 
-// A configuration -- an assignment of shards to groups.
-// Please don't change this.
-type Config struct {
-	Num    int              // config number
-	Shards [NShards]int     // shard -> gid
-	Groups map[int][]string // gid -> servers[]
-}
-
+// 状态码
 const (
-	OK = "OK"
+	OK             = "OK"
+	ErrWrongLeader = "wrongLeader"
+	ErrTimeout     = "timeout"
+	ErrServer      = "ErrServer"
 )
 
-type Err string
+// 必须注册才能进行解码和编码
+func init() {
+	labgob.Register(Config{})
+	labgob.Register(QueryArgs{})
+	labgob.Register(QueryReply{})
+	labgob.Register(JoinArgs{})
+	labgob.Register(JoinReply{})
+	labgob.Register(LeaveArgs{})
+	labgob.Register(MoveArgs{})
+	labgob.Register(LeaveReply{})
+	labgob.Register(MoveReply{})
+}
+
+// A configuration -- an assignment of shards to groups.
+// Please don't change this.
+// 保存配置信息
+type Config struct {
+	Num    int              // config number，当前配置的编号
+	Shards [NShards]int     // shard -> gid，每一个分片到replica group id的映射
+	Groups map[int][]string // gid -> servers[]，每一个replica group包含哪些server
+}
+
+type ClientCommandId struct {
+	ClientId  int64
+	CommandId int64
+}
 
 type JoinArgs struct {
 	Servers map[int][]string // new GID -> servers mappings
+	ClientCommandId
 }
 
 type JoinReply struct {
@@ -45,6 +73,7 @@ type JoinReply struct {
 
 type LeaveArgs struct {
 	GIDs []int
+	ClientCommandId
 }
 
 type LeaveReply struct {
@@ -55,6 +84,7 @@ type LeaveReply struct {
 type MoveArgs struct {
 	Shard int
 	GID   int
+	ClientCommandId
 }
 
 type MoveReply struct {
@@ -64,10 +94,23 @@ type MoveReply struct {
 
 type QueryArgs struct {
 	Num int // desired config number
+	ClientCommandId
 }
 
 type QueryReply struct {
 	WrongLeader bool
 	Err         Err
 	Config      Config
+}
+
+func (c *Config) Copy() Config {
+	config := Config{
+		Num:    c.Num,
+		Shards: c.Shards,
+		Groups: make(map[int][]string),
+	}
+	for gid, s := range c.Groups {
+		config.Groups[gid] = append([]string{}, s...)
+	}
+	return config
 }

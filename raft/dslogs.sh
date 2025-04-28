@@ -1,4 +1,4 @@
-go test -run 2D | dslogs
+go test -run 2 | dslogs
 # Install2D
 # InstallUnreliable2D
 # InstallCrash2D
