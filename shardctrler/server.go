@@ -100,8 +100,6 @@ func (sc *ShardCtrler) Move(args *MoveArgs, reply *MoveReply) {
 
 func (sc *ShardCtrler) Query(args *QueryArgs, reply *QueryReply) {
 	// Your code here.
-	DPrintf("server %v query:args %+v", sc.me, args)
-
 	// 如果是查询已经存在的配置可以直接返回，因为存在的配置是不会改变的；
 	// 如果是-1，则必须在handleApplyCh中进行处理，按照命令顺序执行，不然不准确。
 	sc.mu.Lock()
@@ -129,7 +127,7 @@ func (sc *ShardCtrler) waitCommand(clientId int64, commandId int64, method strin
 		Method:    method,
 		Args:      args,
 	}
-	index, term, isLeader := sc.rf.Start(op)
+	_, _, isLeader := sc.rf.Start(op)
 	if !isLeader {
 		res.Err = ErrWrongLeader
 		return
@@ -138,8 +136,6 @@ func (sc *ShardCtrler) waitCommand(clientId int64, commandId int64, method strin
 	ch := make(chan CommandResult, 1)
 	sc.commandNotifyCh[op.ReqId] = ch
 	sc.mu.Unlock()
-	DPrintf("server %v wait cmd notify,index: %v,term: %v,op: %+v", sc.me, index, term, op)
-
 	t := time.NewTimer(WaitCmdTimeOut)
 	defer t.Stop()
 
@@ -175,7 +171,6 @@ func (sc *ShardCtrler) adjustConfig(conf *Config) {
 
 		for isTryAgain {
 			isTryAgain = false
-			DPrintf("adjust config,%+v", conf)
 			//获取所有的gid
 			var gids []int
 			for gid := range conf.Groups {
@@ -240,7 +235,6 @@ func (sc *ShardCtrler) adjustConfig(conf *Config) {
 					// 由于顺序关系，当检测gid为1时，没有可以供分配的shard
 					// 因为空闲的shard是在检测到gid为3时才空出来
 					if count < avgShardsCount {
-						DPrintf("adjust config try again.")
 						isTryAgain = true
 						continue
 					}
@@ -371,7 +365,6 @@ func (sc *ShardCtrler) handleApplyCh() {
 	for {
 		select {
 		case <-sc.stopCh:
-			DPrintf("get from stopCh,server-%v stop!", sc.me)
 			return
 		case cmd := <-sc.applyCh:
 			//处理快照命令，读取快照的内容
@@ -382,8 +375,6 @@ func (sc *ShardCtrler) handleApplyCh() {
 			if !cmd.CommandValid {
 				continue
 			}
-			cmdIdx := cmd.CommandIndex
-			DPrintf("server %v start apply command %v: %+v", sc.me, cmdIdx, cmd.Command)
 			op := cmd.Command.(Op)
 			sc.mu.Lock()
 
@@ -410,7 +401,6 @@ func (sc *ShardCtrler) handleApplyCh() {
 				sc.notifyWaitCommand(op.ReqId, OK, Config{})
 			}
 
-			DPrintf("apply op: cmdId:%d, op: %+v", cmdIdx, op)
 			sc.mu.Unlock()
 		}
 	}

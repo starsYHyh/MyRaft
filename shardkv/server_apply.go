@@ -13,17 +13,6 @@ func (kv *ShardKV) notifyWaitCommand(reqId int64, err Err, value string) {
 	}
 }
 
-func (kv *ShardKV) getValueByKey(key string) (err Err, value string) {
-	if v, ok := kv.data[key2shard(key)][key]; ok {
-		err = OK
-		value = v
-	} else {
-		err = ErrNoKey
-		value = ""
-	}
-	return
-}
-
 // 判断能否执行客户端发来的命令，主要判断是否在当前 config 下，是否在自己的 shard 上
 func (kv *ShardKV) ProcessKeyReady(configNum int, key string) Err {
 	//config不对
