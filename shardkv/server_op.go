@@ -23,11 +23,9 @@ type CommandResult struct {
 }
 
 func (kv *ShardKV) removeCh(reqId int64) {
-	kv.lock("removeCh")
-	if _, ok := kv.commandNotifyCh[reqId]; ok {
-		delete(kv.commandNotifyCh, reqId)
-	}
-	kv.unlock("removeCh")
+	kv.mu.Lock()
+	delete(kv.commandNotifyCh, reqId)
+	kv.mu.Unlock()
 }
 
 /*
@@ -62,10 +60,10 @@ func (kv *ShardKV) waitCommand(clientId int64, commandId int64, method, key, val
 		res.Err = ErrWrongLeader
 		return
 	}
-	kv.lock("waitCommand")
+	kv.mu.Lock()
 	ch := make(chan CommandResult, 1)
 	kv.commandNotifyCh[op.ReqId] = ch
-	kv.unlock("waitCommand")
+	kv.mu.Unlock()
 	t := time.NewTimer(WaitCmdTimeOut)
 	defer t.Stop()
 

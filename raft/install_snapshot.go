@@ -63,7 +63,6 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	rf.commitIndex = args.LastIncludedIndex
 	rf.recvdIndex = args.LastIncludedIndex
 	rf.persistWithSnapshot()
-	DPrintf(dSnap, "F%d install snapshot lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, rf.lastIncludedIndex, rf.lastIncludedTerm)
 	rf.applySnapshotFlag = true
 	rf.applyCondSignal()
 }

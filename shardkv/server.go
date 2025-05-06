@@ -31,12 +31,12 @@ type ShardKV struct {
 
 	// Your definitions here.
 	stopCh          chan struct{}
-	commandNotifyCh map[int64]chan CommandResult         //用于命令apply后的唤醒
-	lastApplies     [shardctrler.NShards]map[int64]int64 //k-v：ClientId-CommandId
-	config          shardctrler.Config                   //记录当前的config
-	oldConfig       shardctrler.Config                   //保存上一个config，进行shard迁移时，目标节点根据这个config来获取源节点，从而获取shard数据和请求清除shard数据
-	meShards        map[int]bool                         //记录自己分配到的shard
-	data            [shardctrler.NShards]map[string]string
+	commandNotifyCh map[int64]chan CommandResult           // 用于命令apply后的唤醒
+	lastApplies     [shardctrler.NShards]map[int64]int64   // k-v：ClientId-CommandId，记录每一个 shard 的最新 apply 的 commandId
+	config          shardctrler.Config                     // 记录当前的config
+	oldConfig       shardctrler.Config                     // 保存上一个config，进行shard迁移时，目标节点根据这个config来获取源节点，从而获取shard数据和请求清除shard数据
+	meShards        map[int]bool                           // 记录自己分配到的shard，meShards[shardId] = true 表示该节点分配到 shardId
+	data            [shardctrler.NShards]map[string]string // 存储数据，有 NShards 个 shard，每个 shard 存储一个 map，在 map 中存储 key-value 对
 
 	inputShards  map[int]bool                   //当前这个config相较于上一个config新指派的shard，只有input为空了才能更新下一个config
 	outputShards map[int]map[int]MergeShardData // configNum -> shard -> data。当某一个config，当前节点的shard移除，则记录当前config的所有移除shard的mergeShardData
@@ -49,28 +49,6 @@ type ShardKV struct {
 	//定时任务计时器
 	pullConfigTimer *time.Timer //定期获取config
 	pullShardsTimer *time.Timer //定期检查inputShard并请求数据
-
-	//用于互斥锁
-	lockStartTime time.Time
-	lockEndTime   time.Time
-	lockMsg       string
-}
-
-/*
-通用函数
-*/
-
-// 自定义锁
-func (kv *ShardKV) lock(msg string) {
-	kv.mu.Lock()
-	kv.lockStartTime = time.Now()
-	kv.lockMsg = msg
-}
-
-func (kv *ShardKV) unlock(msg string) {
-	kv.lockEndTime = time.Now()
-	kv.lockMsg = ""
-	kv.mu.Unlock()
 }
 
 // the tester calls Kill() when a ShardKV instance won't
@@ -96,27 +74,28 @@ func (kv *ShardKV) pullConfig() {
 				kv.pullConfigTimer.Reset(PullConfigInterval)
 				break
 			}
-			kv.lock("pullconfig")
+			kv.mu.Lock()
 			lastNum := kv.config.Num
-			kv.unlock("pullconfig")
+			kv.mu.Unlock()
 
 			// pullConfig 看到 newConfig.Num+1 存在且当前没有待拉取的 inputShards，
 			// 就通过 raft.Start 提交新的 shardctrler.Config
-			// ??? 为什么不是 newConfig.Num + 2 或其他值，因为有可能本 group 断线一部分时间
 			// 配置号必须连续递增
 			newConfig := kv.scc.Query(lastNum + 1)
+			// 如果确实存在更新的配置
 			if newConfig.Num == lastNum+1 {
 				// 找到新的config
-				kv.lock("pullconfig")
-				// 这一个判断很关键，必须当前shard全部迁移完成才能获取下一个 config
+				kv.mu.Lock()
+				// 必须当前shard全部迁移完成才能获取下一个 config
 				if len(kv.inputShards) == 0 && kv.config.Num+1 == newConfig.Num {
-					kv.unlock("pullconfig")
+					kv.mu.Unlock()
 					//请求该命令
 					kv.rf.Start(newConfig.Copy())
 				} else {
-					kv.unlock("pullconfig")
+					kv.mu.Unlock()
 				}
 			}
+			// 只有当获取到新的config时，才重置定时器
 			kv.pullConfigTimer.Reset(PullConfigInterval)
 		}
 	}
@@ -130,10 +109,6 @@ func (kv *ShardKV) ticker() {
 	//定时获取input shard(如果有的话)
 	go kv.fetchShards()
 }
-
-/*
-初始服务器
-*/
 
 // servers[] contains the ports of the servers in this group.
 //
@@ -185,11 +160,11 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 
 	//初始化自身数据
 	kv.data = [shardctrler.NShards]map[string]string{}
-	for i, _ := range kv.data {
+	for i := range kv.data {
 		kv.data[i] = make(map[string]string)
 	}
 	kv.lastApplies = [shardctrler.NShards]map[int64]int64{}
-	for i, _ := range kv.lastApplies {
+	for i := range kv.lastApplies {
 		kv.lastApplies[i] = make(map[int64]int64)
 	}
 
@@ -205,7 +180,7 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 	kv.oldConfig = config
 
 	//读取快照内容
-	kv.readPersist(true, 0, 0, kv.persister.ReadSnapshot())
+	kv.readPersist(kv.persister.ReadSnapshot())
 
 	kv.commandNotifyCh = make(map[int64]chan CommandResult)
 	//设置定时器

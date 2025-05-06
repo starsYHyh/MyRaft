@@ -1,9 +1,8 @@
 package shardkv
 
 import (
-	"time"
-
 	"MyRaft/shardctrler"
+	"time"
 )
 
 // 判断是否存在指定config和指定shardId的output shard
@@ -21,8 +20,8 @@ RPC，针对output shard
 */
 //请求获取shard
 func (kv *ShardKV) FetchShardData(args *FetchShardDataArgs, reply *FetchShardDataReply) {
-	kv.lock("fetchShardData")
-	defer kv.unlock("fetchShardData")
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
 
 	// 必须是过去的config
 	if args.ConfigNum >= kv.config.Num {
@@ -47,14 +46,14 @@ func (kv *ShardKV) FetchShardData(args *FetchShardDataArgs, reply *FetchShardDat
 
 // 请求清除shard
 func (kv *ShardKV) CleanShardData(args *CleanShardDataArgs, reply *CleanShardDataReply) {
-	kv.lock("cleanShardData")
+	kv.mu.Lock()
 
-	//必须是过去的config
+	//必须是过去的 config
 	if args.ConfigNum >= kv.config.Num {
-		kv.unlock("cleanShardData")
+		kv.mu.Unlock()
 		return
 	}
-	kv.unlock("cleanShardData")
+	kv.mu.Unlock()
 	_, _, isLeader := kv.rf.Start(*args)
 	if !isLeader {
 		return
@@ -62,46 +61,16 @@ func (kv *ShardKV) CleanShardData(args *CleanShardDataArgs, reply *CleanShardDat
 
 	// 简单处理下。。。
 	for i := 0; i < 10; i++ {
-		kv.lock("cleanShardData")
+		kv.mu.Lock()
 		exist := kv.OutputDataExist(args.ConfigNum, args.ShardNum)
-		kv.unlock("cleanShardData")
+		kv.mu.Unlock()
 		if !exist {
 			reply.Success = true
 			return
 		}
 		time.Sleep(time.Millisecond * 20)
 	}
-
-	//采用下面这种方式获取start结果，其实会慢一些，还会出现锁的问题
-	//kv.lock("CleanShardData")
-	//ch := make(chan struct{}, 1)
-	//kv.cleanOutputDataNotifyCh[fmt.Sprintf("%d%d", args.ConfigNum, args.ShardNum)] = ch
-	//kv.unlock("CleanShardData")
-	//t := time.NewTimer(WaitCmdTimeOut)
-	//defer t.Stop()
-	//
-	//select {
-	//case <-t.C:
-	//case <-ch:
-	//case <-kv.stopCh:
-	//}
-	//
-	//kv.lock("removeCh")
-	////删除ch
-	//if _, ok := kv.cleanOutputDataNotifyCh[fmt.Sprintf("%d%d", args.ConfigNum, args.ShardNum)]; ok {
-	//	delete(kv.cleanOutputDataNotifyCh, fmt.Sprintf("%d%d", args.ConfigNum, args.ShardNum))
-	//}
-	////判断是否还存在
-	//exist := kv.OutputDataExist(args.ConfigNum, args.ShardNum)
-	//kv.unlock("removeCh")
-	//if !exist {
-	//	reply.Success = true
-	//}
 }
-
-/*
-定时任务，请求input shard
-*/
 
 // 非空的 inputShards 周期性触发向旧主 FetchShardData
 func (kv *ShardKV) fetchShards() {
@@ -113,14 +82,14 @@ func (kv *ShardKV) fetchShards() {
 			//判断是否有要input的shard
 			_, isLeader := kv.rf.GetState()
 			if isLeader {
-				kv.lock("pullshards")
+				kv.mu.Lock()
 				// 根据 inputShards 中的 shardId 来请求数据
 				// 数据来源于另一个 group 的 outputShards
-				for shardId, _ := range kv.inputShards {
+				for shardId := range kv.inputShards {
 					// 注意要从上一个 config 中请求 shard 的源节点
 					go kv.fetchShard(shardId, kv.oldConfig)
 				}
-				kv.unlock("pullshards")
+				kv.mu.Unlock()
 			}
 			kv.pullShardsTimer.Reset(PullShardsInterval)
 
@@ -128,7 +97,7 @@ func (kv *ShardKV) fetchShards() {
 	}
 }
 
-// 获取指定的shard
+// 获取指定的 shard
 func (kv *ShardKV) fetchShard(shardId int, config shardctrler.Config) {
 	args := FetchShardDataArgs{
 		ConfigNum: config.Num,
@@ -156,7 +125,7 @@ func (kv *ShardKV) fetchShard(shardId int, config shardctrler.Config) {
 			case <-t.C:
 			case isDone := <-done:
 				if isDone && reply.Success {
-					kv.lock("pullShard")
+					kv.mu.Lock()
 					if _, ok := kv.inputShards[shardId]; ok && kv.config.Num == config.Num+1 {
 						replyCopy := reply.Copy()
 						mergeShardData := MergeShardData{
@@ -165,12 +134,12 @@ func (kv *ShardKV) fetchShard(shardId int, config shardctrler.Config) {
 							Data:           replyCopy.Data,
 							CommandIndexes: replyCopy.CommandIndexes,
 						}
-						kv.unlock("pullShard")
+						kv.mu.Unlock()
 						kv.rf.Start(mergeShardData)
 						//不管是不是leader都返回
 						return
 					} else {
-						kv.unlock("pullshard")
+						kv.mu.Unlock()
 					}
 				}
 			}
@@ -187,6 +156,10 @@ func (kv *ShardKV) fetchShard(shardId int, config shardctrler.Config) {
 // 发送给shard源节点，可以删除shard数据了
 // 一般在apply command中处理好input的shard，发送给源节点删除保存的shard数据
 func (kv *ShardKV) callPeerCleanShardData(config shardctrler.Config, shardId int) {
+	// 这里的 config 是上一个配置
+	// shardId 是刚刚迁移完毕的 shard 的 shardId
+	// 根据这两个信息获得上一个配置中，该 shard 属于哪一个 group
+	// 并向其发送请求，以清除源节点中的 shard 数据
 	args := CleanShardDataArgs{
 		ConfigNum: config.Num,
 		ShardNum:  shardId,
@@ -219,11 +192,11 @@ func (kv *ShardKV) callPeerCleanShardData(config shardctrler.Config, shardId int
 			}
 
 		}
-		kv.lock("callPeerCleanShardData")
+		kv.mu.Lock()
 		if kv.config.Num != config.Num+1 || len(kv.inputShards) == 0 {
-			kv.unlock("callPeerCleanShardData")
+			kv.mu.Unlock()
 			break
 		}
-		kv.unlock("callPeerCleanShardData")
+		kv.mu.Unlock()
 	}
 }

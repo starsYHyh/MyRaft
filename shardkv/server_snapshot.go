@@ -32,19 +32,10 @@ func (kv *ShardKV) saveSnapshot(logIndex int) {
 
 // 读取快照
 // 两处调用：初始化阶段；收到Snapshot命令，即接收了leader的Snapshot
-func (kv *ShardKV) readPersist(isInit bool, snapshotTerm, snapshotIndex int, data []byte) {
+func (kv *ShardKV) readPersist(data []byte) {
 	if data == nil || len(data) < 1 {
 		return
 	}
-	//只要不是初始化调用，即如果收到一个Snapshot命令，就要执行该函数
-	//不知道为什么，只要在ShardKV中调用该函数，就会导致测试一直阻塞，就算该函数为空也没办法通过，只能注释掉，将CondInstallSnapshot的逻辑写到InstallSnapshot RPC的处理代码中
-	//if !isInit {
-	//	res := kv.rf.CondInstallSnapshot(snapshotTerm, snapshotIndex, data)
-	//	if !res {
-	//		log.Panicln("kv read persist err in CondInstallSnapshot!")
-	//		return
-	//	}
-	//}
 	//对数据进行同步
 	r := bytes.NewBuffer(data)
 	d := labgob.NewDecoder(r)

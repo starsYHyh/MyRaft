@@ -92,7 +92,7 @@ Test: unreliable net, restarts, partitions, many clients (3A) ...
 Test: unreliable net, restarts, partitions, random keys, many clients (3A) ...
   ... Passed --  35.0  7  8249  746
 PASS
-ok  	6.824/kvraft	290.184s
+ok   6.824/kvraft 290.184s
 ```
 
 每个Passed后的数字是实际时间（以秒为单位）、对等体的数量、发送的 RPC 数量（包括客户端 RPC）以及执行的键/值操作数量（Clerk Get/Put/Append 调用）。
@@ -134,5 +134,5 @@ Test: unreliable net, restarts, partitions, snapshots, many clients (3B) ...
 Test: unreliable net, restarts, partitions, snapshots, random keys, many clients (3B) ...
   ... Passed --  37.7  7  8378  681
 PASS
-ok  	6.824/kvraft	161.538s
+ok   6.824/kvraft 161.538s
 ```

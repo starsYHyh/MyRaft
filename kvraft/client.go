@@ -3,7 +3,6 @@ package kvraft
 import (
 	"MyRaft/labrpc"
 	"crypto/rand"
-	"log"
 	"math/big"
 	"time"
 )
@@ -16,7 +15,7 @@ const (
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 	// You will have to modify this struct.
-	clientId int64
+	clerkID  int64
 	leaderId int
 }
 
@@ -32,7 +31,7 @@ func nrand() int64 {
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
-	ck.clientId = nrand()
+	ck.clerkID = nrand()
 	// You'll have to add code here.
 	return ck
 }
@@ -51,33 +50,25 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 // 根据key获取value
 func (ck *Clerk) Get(key string) string {
 	// You will have to modify this function.
-	//DPrintf("%v client get key：%s.", ck.clientId, key)
 	args := GetArgs{
 		Key:       key,
-		ClientId:  ck.clientId,
+		ClientId:  ck.clerkID,
 		CommandId: nrand(),
 	}
 	leaderId := ck.leaderId
+	reply := GetReply{}
 	for {
-		reply := GetReply{}
-		ok := ck.servers[leaderId].Call("KVServer.Get", &args, &reply)
-		if !ok {
-			//如果请求失败，等一段时间再请求,换一个节点再请求
-			DPrintf("%v client get key %v from server %v,not ok.", ck.clientId, key, leaderId)
+		if !ck.servers[leaderId].Call("KVServer.Get", &args, &reply) {
 			time.Sleep(ChangeLeaderInterval)
 			leaderId = (leaderId + 1) % len(ck.servers)
 			continue
-		} else if reply.Err != OK {
-			DPrintf("%v client get key %v from server %v,reply err = %v!", ck.clientId, key, leaderId, reply.Err)
 		}
 
 		switch reply.Err {
 		case OK:
-			DPrintf("%v client get key %v from server %v,value: %v，OK.", ck.clientId, key, leaderId, reply.Value, leaderId)
 			ck.leaderId = leaderId
 			return reply.Value
 		case ErrNoKey:
-			DPrintf("%v client get key %v from server %v,NO KEY!", ck.clientId, key, leaderId)
 			ck.leaderId = leaderId
 			return ""
 		case ErrTimeOut:
@@ -87,7 +78,6 @@ func (ck *Clerk) Get(key string) string {
 			leaderId = (leaderId + 1) % len(ck.servers)
 			continue
 		}
-
 	}
 }
 
@@ -100,51 +90,34 @@ func (ck *Clerk) Get(key string) string {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-	DPrintf("%v client PutAppend,key：%v,value：%v,op：%v", ck.clientId, key, value, op)
-	// You will have to modify this function.
 	args := PutAppendArgs{
 		Key:       key,
 		Value:     value,
 		Op:        op,
-		ClientId:  ck.clientId,
+		ClientId:  ck.clerkID,
 		CommandId: nrand(),
 	}
 	leaderId := ck.leaderId
+	reply := PutAppendReply{}
 	for {
-		reply := PutAppendReply{}
-		ok := ck.servers[leaderId].Call("KVServer.PutAppend", &args, &reply)
-		if !ok {
-			//可能当前请求的server不是leader，换一个server再访问
-			DPrintf("%v client set key %v to %v to server %v,not ok.", ck.clientId, key, value, leaderId)
+		if !ck.servers[leaderId].Call("KVServer.PutAppend", &args, &reply) {
 			time.Sleep(ChangeLeaderInterval)
 			leaderId = (leaderId + 1) % len(ck.servers)
 			continue
-		} else if reply.Err != OK {
-			DPrintf("%v client set key %v to %v to server %v,reply err = %v!", ck.clientId, key, value, leaderId, reply.Err)
 		}
 
 		switch reply.Err {
 		case OK:
-			DPrintf("%v client set key %v to %v to server %v，OK.", ck.clientId, key, value, leaderId)
 			ck.leaderId = leaderId
 			return
 		case ErrNoKey:
-			DPrintf("%v client set key %v to %v to server %v，NOKEY!", ck.clientId, key, value, leaderId)
 			return
 		case ErrTimeOut:
 			continue
-		case ErrWrongLeader:
-			//换一个节点继续请求
-			time.Sleep(ChangeLeaderInterval)
-			leaderId = (leaderId + 1) % len(ck.servers)
-			continue
-		case ErrServer:
-			//换一个节点继续请求
-			time.Sleep(ChangeLeaderInterval)
-			leaderId = (leaderId + 1) % len(ck.servers)
-			continue
 		default:
-			log.Fatal("client rev unknown err", reply.Err)
+			time.Sleep(ChangeLeaderInterval)
+			leaderId = (leaderId + 1) % len(ck.servers)
+			continue
 		}
 	}
 }

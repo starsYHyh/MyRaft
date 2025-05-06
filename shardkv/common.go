@@ -54,39 +54,19 @@ type PutAppendReply struct {
 	Err Err
 }
 
-func (c *PutAppendArgs) copy() PutAppendArgs {
-	r := PutAppendArgs{
-		Key:       c.Key,
-		Value:     c.Value,
-		Op:        c.Op,
-		ClientId:  c.ClientId,
-		CommandId: c.CommandId,
-		ConfigNum: c.ConfigNum,
-	}
-	return r
-}
-
 type GetArgs struct {
 	Key string
 	// You'll have to add definitions here.
 	ClientId  int64
 	CommandId int64
+	// 相较于 lab3 的实现，这里多了一个ConfigNum
+	// 因为在shardkv中，可能会有多个配置版本的shard
 	ConfigNum int
 }
 
 type GetReply struct {
 	Err   Err
 	Value string
-}
-
-func (c *GetArgs) copy() GetArgs {
-	r := GetArgs{
-		Key:       c.Key,
-		ClientId:  c.ClientId,
-		CommandId: c.CommandId,
-		ConfigNum: c.ConfigNum,
-	}
-	return r
 }
 
 // 用于向目标节点获取input shard

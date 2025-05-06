@@ -2,19 +2,17 @@ package kvraft
 
 import (
 	"MyRaft/labrpc"
-	"os"
-	"testing"
-
-	// import "log"
 	"MyRaft/raft"
 	crand "crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"math/big"
 	"math/rand"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 )
 

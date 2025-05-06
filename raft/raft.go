@@ -171,9 +171,7 @@ func (rf *Raft) resetTime() {
 // 以前，本实验建议您实现一个名为 CondInstallSnapshot 的函数，以避免协调在 applyCh 上发送的快照和日志条目的要求。
 // 这个残留的 API 接口仍然存在，但不鼓励您实现它：相反，我们建议您只需让它返回 true。
 func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
-
 	// Your code here (2D).
-
 	return true
 }
 
@@ -195,7 +193,6 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.lastIncludedIndex = newLastIncludedIndex
 	rf.snapshot = snapshot
 	rf.persistWithSnapshot()
-	DPrintf(dSnap, "F%d snapshot lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, rf.lastIncludedIndex, rf.lastIncludedTerm)
 }
 
 type RequestVoteArgs struct {
@@ -254,7 +251,6 @@ func (rf *Raft) setNewTerm(term int, voteFor int) {
 	rf.currentTerm = term
 	rf.votedFor = voteFor
 	rf.state = Follower
-	// rf.persistWithSnapshot()
 }
 
 // 在ticker中，需要处理两件事
@@ -295,8 +291,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.applySnapshotFlag = false
 
 	rf.readPersistWithSnapshot(persister.ReadRaftState(), persister.ReadSnapshot())
-	DPrintf(dSnap, "F%d recover lastIncludedIndex %d, lastIncludedTerm %d\n", rf.me, rf.lastIncludedIndex, rf.lastIncludedTerm)
-
 	// 初始化状态
 	rf.state = Follower
 	// 心跳时间，因测试要求每秒不多于10次/秒

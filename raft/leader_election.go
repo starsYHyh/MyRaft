@@ -136,12 +136,6 @@ func (rf *Raft) waitVoteReply(voteCtrl *VoteController) {
 	}
 }
 
-// labrpc包模拟了一个有丢失的网络，在这个网络中，服务器可能无法访问，请求和回复可能丢失。
-// Call()发送请求并等待回复。如果在超时间隔内收到回复，则Call()返回true；否则Call()返回false。因此，Call()可能一段时间不返回。
-// 一个false返回可能是由于死服务器、无法访问的活服务器、丢失的请求或丢失的回复。
-//
-// Call()保证返回（也许有延迟）*除非*服务器端的处理程序函数不返回。因此，不需要在Call()周围实现自己的超时。
-// 如果您在使RPC工作时遇到问题，请检查是否已经大写了通过RPC传递的结构中的所有字段名称，并且调用者是否使用&传递了回复结构的地址，而不是结构本身。
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	return ok
@@ -159,7 +153,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
-		// DPrintf(dVote, "F%d refuse vote for C%d because of term\n", rf.me, args.CandidateID)
 		return
 	}
 	// 如果请求的任期大于当前任期
@@ -176,15 +169,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateID
 		rf.persistWithSnapshot()
-		// DPrintf(dVote, "F%d vote for C%d because lastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, lastLogIndex is %d, rf.recvdIndex is %d\n",
-		// 	rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
 		rf.updateTime = time.Now()
 	} else {
 		reply.VoteGranted = false
-		if rf.votedFor == -1 || rf.votedFor == args.CandidateID {
-			// DPrintf(dVote, "F%d refuse vote for %d and args.LastLogTerm is %d, rf.log[rf.recvdIndex].Term is %d, args.LastLogIndex is %d, rf.recvdIndex is %d\n",
-			// 	rf.me, args.CandidateID, args.LastLogTerm, rf.log[rf.recvdIndex].Term, args.LastLogIndex, rf.recvdIndex)
-		}
 	}
 	reply.Term = rf.currentTerm
 }

@@ -22,14 +22,9 @@ type ShardCtrler struct {
 	// Your data here.
 	stopCh          chan struct{}
 	commandNotifyCh map[int64]chan CommandResult
-	lastApplies     map[int64]int64 //k-v：ClientId-CommandId
+	lastApplies     map[int64]int64 //k-v: ClientId-CommandId
 
 	configs []Config // indexed by config num
-
-	//用于互斥锁
-	lockStartTime time.Time
-	lockEndTime   time.Time
-	lockMsg       string
 }
 
 type CommandResult struct {
@@ -48,23 +43,6 @@ type Op struct {
 	Method    string
 }
 
-// 自定义锁
-func (sc *ShardCtrler) lock(msg string) {
-	sc.mu.Lock()
-	sc.lockStartTime = time.Now()
-	sc.lockMsg = msg
-}
-
-func (sc *ShardCtrler) unlock(msg string) {
-	sc.lockEndTime = time.Now()
-	duration := sc.lockEndTime.Sub(sc.lockStartTime)
-	sc.lockMsg = ""
-	sc.mu.Unlock()
-	if duration > MaxLockTime {
-		DPrintf("lock too long:%s:%s\n", msg, duration)
-	}
-}
-
 // the tester calls Kill() when a ShardCtrler instance won't
 // be needed again. you are not required to do anything
 // in Kill(), but it might be convenient to (for example)
@@ -76,14 +54,15 @@ func (sc *ShardCtrler) Kill() {
 }
 
 func (sc *ShardCtrler) removeCh(reqId int64) {
-	sc.lock("removeCh")
-	defer sc.unlock("removeCh")
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
 	delete(sc.commandNotifyCh, reqId)
 }
 
 func (sc *ShardCtrler) getConfigByIndex(idx int) Config {
 	if idx < 0 || idx >= len(sc.configs) {
-		//因为会在config的基础上进行修改形成新的config，又涉及到map需要深拷贝
+		// 因为会在config的基础上进行修改形成新的config，又涉及到map需要深拷贝
+		// 如果 idx 小于 0 或者大于等于 len(sc.configs)，则返回最后一个配置，即为最新的配置
 		return sc.configs[len(sc.configs)-1].Copy()
 	}
 	return sc.configs[idx].Copy()
@@ -93,10 +72,6 @@ func (sc *ShardCtrler) getConfigByIndex(idx int) Config {
 func (sc *ShardCtrler) Raft() *raft.Raft {
 	return sc.rf
 }
-
-/*
-rpc
-*/
 
 func (sc *ShardCtrler) Join(args *JoinArgs, reply *JoinReply) {
 	// Your code here.
@@ -127,17 +102,17 @@ func (sc *ShardCtrler) Query(args *QueryArgs, reply *QueryReply) {
 	// Your code here.
 	DPrintf("server %v query:args %+v", sc.me, args)
 
-	//如果是查询已经存在的配置可以直接返回，因为存在的配置是不会改变的；
-	//如果是-1，则必须在handleApplyCh中进行处理，按照命令顺序执行，不然不准确。
-	sc.lock("query")
+	// 如果是查询已经存在的配置可以直接返回，因为存在的配置是不会改变的；
+	// 如果是-1，则必须在handleApplyCh中进行处理，按照命令顺序执行，不然不准确。
+	sc.mu.Lock()
 	if args.Num >= 0 && args.Num < len(sc.configs) {
 		reply.Err = OK
 		reply.WrongLeader = false
 		reply.Config = sc.getConfigByIndex(args.Num)
-		sc.unlock("query")
+		sc.mu.Unlock()
 		return
 	}
-	sc.unlock("query")
+	sc.mu.Unlock()
 	res := sc.waitCommand(args.ClientId, args.CommandId, "Query", *args)
 	if res.Err == ErrWrongLeader {
 		reply.WrongLeader = true
@@ -147,7 +122,6 @@ func (sc *ShardCtrler) Query(args *QueryArgs, reply *QueryReply) {
 }
 
 func (sc *ShardCtrler) waitCommand(clientId int64, commandId int64, method string, args interface{}) (res CommandResult) {
-	DPrintf("server %v wait cmd start,clientId：%v,commandId: %v,method: %s,args: %+v", sc.me, clientId, commandId, method, args)
 	op := Op{
 		ReqId:     nrand(),
 		ClientId:  clientId,
@@ -158,13 +132,12 @@ func (sc *ShardCtrler) waitCommand(clientId int64, commandId int64, method strin
 	index, term, isLeader := sc.rf.Start(op)
 	if !isLeader {
 		res.Err = ErrWrongLeader
-		DPrintf("server %v wait cmd NOT LEADER.", sc.me)
 		return
 	}
-	sc.lock("waitCommand")
+	sc.mu.Lock()
 	ch := make(chan CommandResult, 1)
 	sc.commandNotifyCh[op.ReqId] = ch
-	sc.unlock("waitCommand")
+	sc.mu.Unlock()
 	DPrintf("server %v wait cmd notify,index: %v,term: %v,op: %+v", sc.me, index, term, op)
 
 	t := time.NewTimer(WaitCmdTimeOut)
@@ -177,16 +150,10 @@ func (sc *ShardCtrler) waitCommand(clientId int64, commandId int64, method strin
 	case <-sc.stopCh:
 		res.Err = ErrServer
 	}
-
 	sc.removeCh(op.ReqId)
-	DPrintf("server %v wait cmd end,Op: %+v.", sc.me, op)
 	return
 
 }
-
-/*
-配置调整代码
-*/
 
 // 配置的调整
 // 我们的策略是尽量不改变当前的配置
@@ -195,8 +162,8 @@ func (sc *ShardCtrler) adjustConfig(conf *Config) {
 	if len(conf.Groups) == 0 {
 		conf.Shards = [NShards]int{}
 	} else if len(conf.Groups) == 1 {
-		for gid, _ := range conf.Groups {
-			for i, _ := range conf.Shards {
+		for gid := range conf.Groups {
+			for i := range conf.Shards {
 				conf.Shards[i] = gid
 			}
 		}
@@ -211,7 +178,7 @@ func (sc *ShardCtrler) adjustConfig(conf *Config) {
 			DPrintf("adjust config,%+v", conf)
 			//获取所有的gid
 			var gids []int
-			for gid, _ := range conf.Groups {
+			for gid := range conf.Groups {
 				gids = append(gids, gid)
 			}
 			sort.Ints(gids)
@@ -269,7 +236,7 @@ func (sc *ShardCtrler) adjustConfig(conf *Config) {
 						}
 					}
 					//因为调整的顺序问题，可能前面调整的server没有足够的shard进行分配，需要在进行一次调整
-					// 例如gid为 [1, 3]，但是 已分配：[3, 3, 3, 3, 2, 2]
+					// 例如gid为 [1, 3]，但是 已分配: [3, 3, 3, 3, 2, 2]
 					// 由于顺序关系，当检测gid为1时，没有可以供分配的shard
 					// 因为空闲的shard是在检测到gid为3时才空出来
 					if count < avgShardsCount {
@@ -323,7 +290,7 @@ func (sc *ShardCtrler) adjustConfig(conf *Config) {
 		}
 		if len(emptyShards) > 0 {
 			var gids []int
-			for k, _ := range conf.Groups {
+			for k := range conf.Groups {
 				gids = append(gids, k)
 			}
 			sort.Ints(gids)
@@ -348,7 +315,7 @@ applych处理代码
 */
 
 func (sc *ShardCtrler) handleJoinCommand(args JoinArgs) {
-	// 例如：
+	// 例如:
 	// ck.Join(map[int][]string{
 	// 	2: []string{"10.0.0.2:3000", "10.0.0.3:3000"},  // 添加GID为2的复制组
 	// 	3: []string{"10.0.0.4:3000", "10.0.0.5:3000"}   // 添加GID为3的复制组
@@ -416,9 +383,9 @@ func (sc *ShardCtrler) handleApplyCh() {
 				continue
 			}
 			cmdIdx := cmd.CommandIndex
-			DPrintf("server %v start apply command %v：%+v", sc.me, cmdIdx, cmd.Command)
+			DPrintf("server %v start apply command %v: %+v", sc.me, cmdIdx, cmd.Command)
 			op := cmd.Command.(Op)
-			sc.lock("handleApplyCh")
+			sc.mu.Lock()
 
 			if op.Method == "Query" {
 				//处理读
@@ -427,13 +394,7 @@ func (sc *ShardCtrler) handleApplyCh() {
 			} else {
 				//处理其他命令
 				//判断命令是否重复
-				isRepeated := false
-				if v, ok := sc.lastApplies[op.ClientId]; ok {
-					if v == op.CommandId {
-						isRepeated = true
-					}
-				}
-				if !isRepeated {
+				if op.CommandId != sc.lastApplies[op.ClientId] {
 					switch op.Method {
 					case "Join":
 						sc.handleJoinCommand(op.Args.(JoinArgs))
@@ -450,7 +411,7 @@ func (sc *ShardCtrler) handleApplyCh() {
 			}
 
 			DPrintf("apply op: cmdId:%d, op: %+v", cmdIdx, op)
-			sc.unlock("handleApplyCh")
+			sc.mu.Unlock()
 		}
 	}
 }

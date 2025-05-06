@@ -48,33 +48,11 @@ type KVServer struct {
 
 	//持久化
 	persister *raft.Persister
-
-	//用于互斥锁
-	lockStartTime time.Time
-	lockEndTime   time.Time
-	lockMsg       string
-}
-
-// 自定义锁
-func (kv *KVServer) lock(msg string) {
-	kv.mu.Lock()
-	kv.lockStartTime = time.Now()
-	kv.lockMsg = msg
-}
-
-func (kv *KVServer) unlock(msg string) {
-	kv.lockEndTime = time.Now()
-	duration := kv.lockEndTime.Sub(kv.lockStartTime)
-	kv.lockMsg = ""
-	kv.mu.Unlock()
-	if duration > MaxLockTime {
-		DPrintf("lock too long:%s:%s\n", msg, duration)
-	}
 }
 
 func (kv *KVServer) removeCh(reqId int64) {
-	kv.lock("removeCh")
-	defer kv.unlock("removeCh")
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
 	delete(kv.commandNotifyCh, reqId)
 }
 
@@ -82,36 +60,28 @@ func (kv *KVServer) removeCh(reqId int64) {
 func (kv *KVServer) waitCmd(op Op) (res CommandResult) {
 	DPrintf("server %v wait cmd start,Op: %+v.\n", kv.me, op)
 
-	//提交命令,其实这里的start要改，一个kv数据库get命令可以发生在所有节点上
-	index, term, isLeader := kv.rf.Start(op)
+	_, _, isLeader := kv.rf.Start(op)
 	if !isLeader {
 		res.Err = ErrWrongLeader
 		return
 	}
 
-	kv.lock("waitCmd")
+	kv.mu.Lock()
 	ch := make(chan CommandResult, 1)
 	kv.commandNotifyCh[op.ReqId] = ch
-	kv.unlock("waitCmd")
-	DPrintf("start cmd: index:%d, term:%d, op:%+v", index, term, op)
-
+	kv.mu.Unlock()
 	t := time.NewTimer(WaitCmdTimeOut)
 	defer t.Stop()
 	select {
 	case <-kv.stopCh:
 		DPrintf("stop ch waitCmd")
-		kv.removeCh(op.ReqId)
 		res.Err = ErrServer
-		return
 	case res = <-ch:
-		kv.removeCh(op.ReqId)
-		return
 	case <-t.C:
-		kv.removeCh(op.ReqId)
 		res.Err = ErrTimeOut
-		return
-
 	}
+	kv.removeCh(op.ReqId)
+	return
 }
 
 // 处理Get rpc
@@ -136,8 +106,6 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	res := kv.waitCmd(op)
 	reply.Err = res.Err
 	reply.Value = res.Value
-
-	DPrintf("server %v in rpc Get,args：%+v,reply：%+v", kv.me, args, reply)
 }
 
 // 处理Put rpc
@@ -160,8 +128,6 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	//等待命令执行
 	res := kv.waitCmd(op)
 	reply.Err = res.Err
-
-	DPrintf("server %v in rpc PutAppend,args：%+v,reply：%+v", kv.me, args, reply)
 }
 
 // the tester calls Kill() when a KVServer instance won't
@@ -200,22 +166,15 @@ func (kv *KVServer) saveSnapshot(logIndex int) {
 		panic(err)
 	}
 	data := w.Bytes()
+	// 向底层 raft 通知进行快照
 	kv.rf.Snapshot(logIndex, data)
 }
 
 // 读取快照
 // 两处调用：初始化阶段；收到Snapshot命令，即接收了leader的Snapshot
-func (kv *KVServer) readPersist(isInit bool, snapshotTerm, snapshotIndex int, data []byte) {
+func (kv *KVServer) readPersist(data []byte) {
 	if data == nil || len(data) < 1 {
 		return
-	}
-	//只要不是初始化调用，即如果收到一个Snapshot命令，就要执行该函数
-	if !isInit {
-		res := kv.rf.CondInstallSnapshot(snapshotTerm, snapshotIndex, data)
-		if !res {
-			log.Panicln("kv read persist err in CondInstallSnapshot!")
-			return
-		}
 	}
 	//对数据进行同步
 	r := bytes.NewBuffer(data)
@@ -230,16 +189,6 @@ func (kv *KVServer) readPersist(isInit bool, snapshotTerm, snapshotIndex int, da
 		kv.data = kvData
 		kv.lastApplies = lastApplies
 	}
-}
-
-func (kv *KVServer) getValueByKey(key string) (err Err, value string) {
-	if v, ok := kv.data[key]; ok {
-		err = OK
-		value = v
-	} else {
-		err = ErrNoKey
-	}
-	return
 }
 
 func (kv *KVServer) notifyWaitCommand(reqId int64, err Err, value string) {
@@ -262,9 +211,9 @@ func (kv *KVServer) handleApplyCh() {
 			//处理快照命令，读取快照的内容
 			if cmd.SnapshotValid {
 				DPrintf("%v get install sn,%v %v", kv.me, cmd.SnapshotIndex, cmd.SnapshotTerm)
-				kv.lock("waitApplyCh_sn")
-				kv.readPersist(false, cmd.SnapshotTerm, cmd.SnapshotIndex, cmd.Snapshot)
-				kv.unlock("waitApplyCh_sn")
+				kv.mu.Lock()
+				kv.readPersist(cmd.Snapshot)
+				kv.mu.Unlock()
 				continue
 			}
 			//处理普通命令
@@ -272,42 +221,29 @@ func (kv *KVServer) handleApplyCh() {
 				continue
 			}
 			cmdIdx := cmd.CommandIndex
-			DPrintf("server %v start apply command %v：%+v", kv.me, cmdIdx, cmd.Command)
 			op := cmd.Command.(Op)
-			kv.lock("handleApplyCh")
+			kv.mu.Lock()
 
 			if op.Method == "Get" {
 				//处理读
-				e, v := kv.getValueByKey(op.Key)
-				kv.notifyWaitCommand(op.ReqId, e, v)
+				if v, ok := kv.data[op.Key]; ok {
+					kv.notifyWaitCommand(op.ReqId, OK, v)
+				} else {
+					kv.notifyWaitCommand(op.ReqId, ErrNoKey, "")
+				}
 			} else if op.Method == "Put" || op.Method == "Append" {
 				//处理写
 				//判断命令是否重复
-				isRepeated := false
-				if v, ok := kv.lastApplies[op.ClientId]; ok {
-					if v == op.CommandId {
-						isRepeated = true
-					}
-				}
-
-				if !isRepeated {
+				if op.CommandId != kv.lastApplies[op.ClientId] {
 					switch op.Method {
 					case "Put":
 						kv.data[op.Key] = op.Value
 						kv.lastApplies[op.ClientId] = op.CommandId
 					case "Append":
-						e, v := kv.getValueByKey(op.Key)
-						if e == ErrNoKey {
-							//按put处理
-							kv.data[op.Key] = op.Value
-							kv.lastApplies[op.ClientId] = op.CommandId
-						} else {
-							//追加
-							kv.data[op.Key] = v + op.Value
-							kv.lastApplies[op.ClientId] = op.CommandId
-						}
+						kv.data[op.Key] += op.Value
+						kv.lastApplies[op.ClientId] = op.CommandId
 					default:
-						kv.unlock("handleApplyCh")
+						kv.mu.Unlock()
 						panic("unknown method " + op.Method)
 					}
 
@@ -315,15 +251,12 @@ func (kv *KVServer) handleApplyCh() {
 				//命令处理成功
 				kv.notifyWaitCommand(op.ReqId, OK, "")
 			} else {
-				kv.unlock("handleApplyCh")
+				kv.mu.Unlock()
 				panic("unknown method " + op.Method)
 			}
-
-			DPrintf("apply op: cmdId:%d, op: %+v, data:%v", cmdIdx, op, kv.data[op.Key])
 			//每应用一条命令，就判断是否进行持久化
 			kv.saveSnapshot(cmdIdx)
-
-			kv.unlock("handleApplyCh")
+			kv.mu.Unlock()
 		}
 
 	}
@@ -358,7 +291,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	kv.stopCh = make(chan struct{})
 	//读取快照
-	kv.readPersist(true, 0, 0, kv.persister.ReadSnapshot())
+	kv.readPersist(kv.persister.ReadSnapshot())
 
 	kv.commandNotifyCh = make(map[int64]chan CommandResult)
 	kv.applyCh = make(chan raft.ApplyMsg)
